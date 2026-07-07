@@ -1,0 +1,17 @@
+# Inherits workspace-level .gitignore
+# Project-specific additions:
+
+# Large model cache (eazy-py downloads templates here)
+eazy_templates/
+EAZY/
+*.pz
+*.zout
+*.zphot
+
+# CIGALE outputs
+out/
+pcigale_results/
+
+# Scratch / temp
+scratch/
+tmp/

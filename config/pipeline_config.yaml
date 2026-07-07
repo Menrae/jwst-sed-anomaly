@@ -1,0 +1,101 @@
+# ── pipeline_config.yaml ──────────────────────────────────────────────────────
+# Inspired by tsdat's pipeline.yaml schema.
+# Each top-level key corresponds to a pipeline stage class.
+# ─────────────────────────────────────────────────────────────────────────────
+
+pipeline_name: jwst-sed-anomaly
+data_level: a1                        # raw-to-processed output level (tsdat convention)
+version: "0.1.0"
+last_updated: null                    # set by Prompt A.1 updater
+git_commit_hash: null                 # set by Prompt A.1 updater
+
+# ── Retriever (pipeline/retriever.py → MASTRetriever) ────────────────────────
+retriever:
+  surveys:
+    - name: ceers
+      url: "https://ceers.github.io/dr06.html"
+      output_file: "data/raw/ceers_dr1.fits"
+      mast_collection: "CEERS"
+    - name: jades
+      url: "https://archive.stsci.edu/hlsp/jades"
+      output_file: "data/raw/jades_dr1.fits"
+      mast_collection: "JADES"
+    - name: cosmos_web
+      url: "https://cosmos.astro.caltech.edu/page/cosmosweb"
+      output_file: "data/raw/cosmos_web_early.fits"
+      mast_collection: "COSMOS-Web"
+  required_columns:
+    - ra
+    - dec
+    - z_phot
+  band_prefixes:
+    - F090W
+    - F115W
+    - F150W
+    - F200W
+    - F277W
+    - F356W
+    - F410M
+    - F444W
+    - F770W
+  data_provenance:             # populated by Prompt A.1 updater
+    ceers_download_url: null
+    jades_download_url: null
+    access_date: null
+
+# ── Standardiser (pipeline/standardise.py → SEDStandardiser) ─────────────────
+standardiser:
+  output_data_level: a1
+  redshift_range: [0.5, 10.0]         # rest-frame filter range
+  min_photometric_bands: 4            # drop sources with fewer valid fluxes
+  flux_unit: uJy                      # target flux unit after normalisation
+  sed_fitter: eazy                    # options: eazy | cigale | stub
+  eazy:
+    template_set: "tweak_fsps_QSF_12_v3"
+    z_min: 0.01
+    z_max: 12.0
+    z_step: 0.01
+    param_file: "config/zphot.param"
+  output_filename_convention: "{survey}.a1.{date}.{time}.nc"
+
+# ── Quality / Anomaly Detection (pipeline/quality.py) ─────────────────────────
+quality:
+  output_data_level: b1
+  anomaly_methods:
+    - isolation_forest
+    - umap_dbscan
+  outlier_fraction: 0.02              # flag top 2% by anomaly score
+  contaminant_catalogues:
+    agn:
+      name: "Milliquas v8"
+      url: "https://quasars.org/milliquas.htm"
+      match_radius_arcsec: 1.5
+    emission_line:
+      name: "3D-HST"
+      url: "https://3dhst.research.yale.edu"
+      match_radius_arcsec: 1.0
+  isolation_forest:
+    n_estimators: 200
+    contamination: 0.02
+    random_state: 42
+  umap:
+    n_neighbors: 15
+    min_dist: 0.1
+    n_components: 2
+    random_state: 42
+  dbscan:
+    eps: 0.5
+    min_samples: 5
+  checkers_used: null                 # populated by Prompt A.1 updater
+
+# ── Storage / Output (pipeline/output.py) ─────────────────────────────────────
+storage:
+  output_dir: "data/flagged"
+  figures_dir: "results/figures"
+  tables_dir: "results/tables"
+  output_formats:
+    - fits                            # primary science output
+    - csv                             # human-readable summary
+  catalogue_filename: "{survey}.b1.anomalies.{date}.fits"
+  include_qc_flags: true
+  include_anomaly_scores: true

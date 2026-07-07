@@ -1,0 +1,57 @@
+# ── quality_config.yaml ───────────────────────────────────────────────────────
+# Mirrors tsdat's quality.yaml: a list of checkers, each with a variable
+# target, threshold, and handler action.
+# ─────────────────────────────────────────────────────────────────────────────
+
+checkers:
+
+  - name: sed_residual_range
+    description: >
+      Flag sources where any per-band SED residual (|obs-model|/err)
+      exceeds the threshold. Extreme residuals indicate either photometric
+      outliers, catastrophic photo-z failures, or genuinely anomalous SEDs.
+    variable: residuals          # xr.Dataset variable name
+    threshold: 5.0               # sigma
+    handler: flag_and_log
+    qc_variable: qc_residual_outlier
+    applies_to: all_bands
+
+  - name: photometric_coverage_fraction
+    description: >
+      Flag sources where the fraction of valid (non-NaN, non-zero) flux
+      measurements falls below the minimum coverage threshold.
+      Under-sampled SEDs produce unreliable anomaly scores.
+    variable: flux_coverage_fraction
+    threshold: 0.5               # require ≥50% band coverage
+    handler: flag_and_log
+    qc_variable: qc_poor_coverage
+
+  - name: photoz_chi2_excess
+    description: >
+      Flag sources with anomalously high EAZY best-fit chi2, which may
+      indicate catastrophic photo-z failure rather than a genuine SED anomaly.
+    variable: chi2_eazy
+    threshold: 10.0
+    handler: flag_and_log
+    qc_variable: qc_chi2_excess
+
+  - name: redshift_range_filter
+    description: >
+      Remove sources outside the science redshift window. Keeps only
+      z_phot in [z_min, z_max] as configured in pipeline_config.yaml.
+    variable: z_phot
+    threshold:
+      min: 0.5
+      max: 10.0
+    handler: drop_source
+    qc_variable: qc_redshift_out_of_range
+
+handlers:
+  flag_and_log:
+    description: >
+      Set the qc_ variable to 1 for failing sources and log a warning.
+      Source is retained in the dataset but marked for downstream filtering.
+  drop_source:
+    description: >
+      Remove the source entirely from the dataset and log the count of
+      dropped sources at the end of the QC stage.
