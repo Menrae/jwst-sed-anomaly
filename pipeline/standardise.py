@@ -74,6 +74,14 @@ _UNIT_CONVERSION_TO_UJY = {
     "jy": 1e6,
 }
 
+#: Fallback per-band flux-uncertainty column suffixes, checked in priority
+#: order, when the canonical "<band>_flux_err" column is absent. CEERS DR1.0
+#: (Cox et al. 2025) does not use "<band>_flux_err" at all; it publishes
+#: "<band>_fluxerr_emp" (empirical, preferred) and "<band>_fluxerr_se"
+#: (SExtractor formal error) instead. Same unit as "<band>_flux" (uJy),
+#: verified via S/N sanity check against the real catalogue.
+_FLUX_ERR_FALLBACK_SUFFIXES = ["fluxerr_emp", "fluxerr_se"]
+
 
 def log_data_level_transition(from_level: str, to_level: str, n_in: int, n_out: int) -> None:
     """Log a standardised tsdat-style pipeline stage transition line.
@@ -169,6 +177,7 @@ class SEDStandardiser:
         )
 
         bands = self._flux_bands_present(df)
+        df = self._canonicalize_flux_err_columns(df, bands)
         df = self._convert_fluxes_to_ujy(df, bands)
 
         flux_cols = [f"{b.lower()}_flux" for b in bands]
@@ -193,6 +202,35 @@ class SEDStandardiser:
     def _flux_bands_present(self, df: pd.DataFrame) -> List[str]:
         """Bands from `self.band_list` that have a `<band>_flux` column in df."""
         return [b for b in self.band_list if f"{b.lower()}_flux" in df.columns]
+
+    def _canonicalize_flux_err_columns(self, df: pd.DataFrame, bands: List[str]) -> pd.DataFrame:
+        """Rename survey-specific per-band error columns to the canonical
+        `<band>_flux_err` name that `_convert_fluxes_to_ujy` and
+        `extract_residuals` expect.
+
+        Without this, a survey whose error columns are never named
+        `<band>_flux_err` (e.g. CEERS DR1.0's `<band>_fluxerr_emp`/`_se`)
+        silently fails every per-band error lookup: no source ever has >=2
+        bands with a valid error, so `extract_residuals` produces an all-NaN
+        residual matrix and every downstream anomaly score collapses to a
+        constant 0 -- verified against the real CEERS catalogue.
+        """
+        rename = {}
+        renamed = []
+        for band in bands:
+            canonical = f"{band.lower()}_flux_err"
+            if canonical in df.columns:
+                continue
+            for suffix in _FLUX_ERR_FALLBACK_SUFFIXES:
+                candidate = f"{band.lower()}_{suffix}"
+                if candidate in df.columns:
+                    rename[candidate] = canonical
+                    renamed.append(f"{canonical} (from {candidate})")
+                    break
+        if rename:
+            df = df.rename(columns=rename)
+            logger.info("preprocess: canonicalised per-band error columns: %s", renamed)
+        return df
 
     def _convert_fluxes_to_ujy(self, df: pd.DataFrame, bands: List[str]) -> pd.DataFrame:
         """Normalise flux/flux_err columns to the target unit (uJy).

@@ -100,6 +100,27 @@ def test_preprocess_renames_ceers_lephare_redshift_columns_to_z_phot(standardise
     assert (result["z_phot"] == 2.0).all()
 
 
+@pytest.mark.parametrize("err_suffix", ["fluxerr_emp", "fluxerr_se"])
+def test_preprocess_canonicalises_ceers_flux_err_columns(standardiser, err_suffix):
+    """CEERS DR1.0 (Cox et al. 2025) names its per-band error columns
+    <band>_fluxerr_emp/_se rather than <band>_flux_err. Without canonicalising
+    these to <band>_flux_err, every per-band error lookup in extract_residuals
+    silently returns NaN, no source ever has >=2 usable bands, and the
+    residual matrix collapses to all-NaN -- verified against the real CEERS
+    catalogue, where this collapsed every downstream anomaly score to 0."""
+    df = _make_catalogue(n=5, rng=np.random.default_rng(6))
+    df["z_phot"] = 2.0
+    rename = {f"{b.lower()}_flux_err": f"{b.lower()}_{err_suffix}" for b in BANDS}
+    df = df.rename(columns=rename)
+
+    result = standardiser.preprocess(df)
+
+    for b in BANDS:
+        assert f"{b.lower()}_flux_err" in result.columns
+        assert f"{b.lower()}_{err_suffix}" not in result.columns
+        assert (result[f"{b.lower()}_flux_err"] == df[f"{b.lower()}_{err_suffix}"]).all()
+
+
 # ── extract_residuals ────────────────────────────────────────────────────
 
 
