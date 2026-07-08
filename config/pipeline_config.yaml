@@ -70,7 +70,7 @@ quality:
       name: "Milliquas v8"
       url: "https://quasars.org/milliquas.htm"
       match_radius_arcsec: 1.5
-      catalogue_path: null          # local FITS/CSV path once downloaded; required for qc_agn_match
+      catalogue_path: "data/raw/milliquas_v8.fits"  # Milliquas v8 Final Edition (2023), 1,021,800 sources
     emission_line:
       name: "3D-HST"
       url: "https://3dhst.research.yale.edu"
