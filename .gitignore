@@ -1,5 +1,26 @@
-# Inherits workspace-level .gitignore
-# Project-specific additions:
+# NOTE: a comment here previously claimed this "inherits" ../.gitignore at the
+# workspace level, but git does not read .gitignore files outside a repo's
+# root — that file (with data/, *.fits, *.nc, __pycache__/ etc.) was never
+# actually applied. Those patterns are duplicated below so they really take
+# effect.
+
+# ── Data files (too large / proprietary for git) ─────────────────────────────
+*.fits
+*.fit
+*.fz
+*.fts
+*.nc
+*.hdf5
+*.h5
+data/raw/
+data/processed/
+data/flagged/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 
 # Large model cache (eazy-py downloads templates here)
 eazy_templates/
@@ -11,6 +32,20 @@ EAZY/
 # CIGALE outputs
 out/
 pcigale_results/
+
+# ── LaTeX build artefacts ─────────────────────────────────────────────────────
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lot
+*.lof
+results/paper/out/
 
 # Scratch / temp
 scratch/
