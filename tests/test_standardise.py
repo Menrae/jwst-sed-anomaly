@@ -83,6 +83,23 @@ def test_preprocess_returns_dataframe_with_reset_index(standardiser):
     assert list(result.index) == list(range(len(result)))
 
 
+@pytest.mark.parametrize("ceers_col", ["lp_z_best", "lp_z_med"])
+def test_preprocess_renames_ceers_lephare_redshift_columns_to_z_phot(standardiser, ceers_col):
+    """CEERS DR1.0 (Cox et al. 2025) names its LePHARE photo-z columns
+    lp_z_best/lp_z_med rather than z_phot; preprocess must recognise and
+    rename them so downstream stages (run_eazy_fit, extract_residuals) work
+    unchanged."""
+    df = _make_catalogue(n=5, rng=np.random.default_rng(5))
+    df = df.rename(columns={"z_phot": ceers_col})
+    df[ceers_col] = 2.0
+
+    result = standardiser.preprocess(df)
+
+    assert "z_phot" in result.columns
+    assert ceers_col not in result.columns
+    assert (result["z_phot"] == 2.0).all()
+
+
 # ── extract_residuals ────────────────────────────────────────────────────
 
 

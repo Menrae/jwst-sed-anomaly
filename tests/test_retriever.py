@@ -12,6 +12,7 @@ from astropy.table import Table
 
 from pipeline.retriever import (
     BAND_PREFIXES,
+    CEERS_DR1_URL,
     REQUIRED_COLUMNS,
     MASTRetriever,
 )
@@ -40,7 +41,7 @@ def test_fetch_ceers_falls_back_to_https_when_astroquery_fails(retriever, tmp_pa
     mock_mast.assert_called_once()
     mock_https.assert_called_once()
     called_url = mock_https.call_args.args[0]
-    assert called_url == "https://ceers.github.io/dr06.html"
+    assert called_url == CEERS_DR1_URL
 
 
 def test_fetch_jades_uses_astroquery_when_available(retriever, tmp_path, mocker):
@@ -57,10 +58,17 @@ def test_fetch_jades_uses_astroquery_when_available(retriever, tmp_path, mocker)
 
 
 def test_download_via_https_never_called_with_real_network(retriever, tmp_path, mocker):
-    """Sanity check that requests.get is fully mocked and never hits the network."""
+    """Sanity check that requests.get is fully mocked and never hits the network.
+
+    CEERS_DR1_URL is a .gz file, so the dummy payload must itself be valid
+    gzip data for _download_via_https's transparent decompression to succeed.
+    """
+    import gzip as gzip_module
+
+    dummy_content = b"dummy bytes"
     mock_get = mocker.patch("pipeline.retriever.requests.get")
     mock_response = mocker.Mock()
-    mock_response.iter_content.return_value = [b"dummy bytes"]
+    mock_response.iter_content.return_value = [gzip_module.compress(dummy_content)]
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
 
@@ -72,7 +80,7 @@ def test_download_via_https_never_called_with_real_network(retriever, tmp_path, 
     retriever.fetch_ceers(out_path)
 
     mock_get.assert_called_once()
-    assert out_path.read_bytes() == b"dummy bytes"
+    assert out_path.read_bytes() == dummy_content
 
 
 # ── load_catalogue ────────────────────────────────────────────────────────

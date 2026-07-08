@@ -140,9 +140,20 @@ class SEDStandardiser:
         n0 = len(df)
         df = df.copy()
 
-        redshift_col = "z_phot" if "z_phot" in df.columns else "redshift"
+        redshift_col = next(
+            (c for c in ("z_phot", "redshift", "lp_z_best", "lp_z_med") if c in df.columns),
+            "redshift",
+        )
         if redshift_col not in df.columns:
-            raise ValueError("preprocess() requires a 'z_phot' or 'redshift' column")
+            raise ValueError(
+                "preprocess() requires a 'z_phot', 'redshift', 'lp_z_best', or 'lp_z_med' column"
+            )
+        if redshift_col in ("lp_z_best", "lp_z_med"):
+            # Normalise CEERS DR1.0 (Cox et al. 2025) LePHARE photo-z columns to
+            # 'z_phot' so downstream stages (run_eazy_fit, extract_residuals, ...)
+            # pick it up without needing to know about survey-specific naming.
+            df = df.rename(columns={redshift_col: "z_phot"})
+            redshift_col = "z_phot"
 
         z_min, z_max = self.redshift_range
         df = df[df[redshift_col].between(z_min, z_max)]
