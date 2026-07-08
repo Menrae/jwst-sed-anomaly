@@ -123,7 +123,7 @@ pip install -r requirements.txt
 ```
 
 `requirements.txt` pins the major dependency versions (astropy, astroquery,
-xarray, scikit-learn, umap-learn, eazy-py, pytest, …); exact conda-forge
+xarray, scikit-learn, umap-learn, eazy, pytest, …); exact conda-forge
 pins live in `../.devcontainer/environment.yml`.
 
 ---
