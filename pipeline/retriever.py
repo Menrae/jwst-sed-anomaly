@@ -23,14 +23,25 @@ single-visit HST/JWST observations are. This module therefore always
 *attempts* an astroquery-based MAST lookup first (best-effort; the exact
 proposal IDs / collections used are noted on each method), and if that
 fails for any reason (import error, empty result set, network error) it
-**falls back to a direct HTTPS download from the published data release
-page** documented in the project README:
+falls back to a direct HTTPS download documented in the project README:
 
-    CEERS DR1 : https://ceers.github.io/dr06.html
+    CEERS DR1 : https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz
     JADES DR1 : https://archive.stsci.edu/hlsp/jades
 
-Both of those URLs are HTML landing pages rather than direct file links, so
-the fallback download is logged loudly (``logger.warning``) with a note
+The CEERS URL is the direct, gzipped FITS catalogue file published alongside
+Cox et al. (2025) (the CEERS DR1.0 photometric + physical-parameter catalogue,
+~87,000 galaxies, 14 filters; also archived on MAST under DOI
+https://doi.org/10.17909/z7p0-8481) — verified to serve
+``Content-Type: application/x-gzip`` rather than HTML. Note that this DOI
+covers the CEERS HLSP collection's *imaging* products in MAST's queryable
+CAOM index; the photometric catalogue itself is not registered there as a
+discoverable `astroquery.mast.Observations` product (confirmed empirically:
+querying ``obs_collection="HLSP", provenance_name="CEERS"`` returns only
+``dataproduct_type="image"`` / ``productType="SCIENCE"`` rows, never a
+catalogue), which is why the direct TACC-hosted URL is required.
+
+The JADES URL remains an HTML landing page rather than a direct file link, so
+that fallback download is logged loudly (``logger.warning``) with a note
 that the operator should confirm the retrieved payload is really the
 catalogue file and not an HTML page, and update ``config/pipeline_config.yaml``
 with the resolved direct-download URL once available.
@@ -40,8 +51,10 @@ Populated by: Claude Code Prompt 2.1
 
 from __future__ import annotations
 
+import gzip
 import logging
 import re
+import shutil
 from pathlib import Path
 from typing import Optional, Union
 
@@ -59,7 +72,9 @@ logger = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ["ra", "dec"]
 
 #: Acceptable column names for redshift; at least one must be present.
-REDSHIFT_COLUMN_CANDIDATES = ["redshift", "z_phot"]
+#: lp_z_best/lp_z_med are the CEERS DR1.0 (Cox et al. 2025) LePHARE photo-z
+#: columns.
+REDSHIFT_COLUMN_CANDIDATES = ["redshift", "z_phot", "lp_z_best", "lp_z_med"]
 
 #: NIRCam/MIRI band prefixes used to identify photometric flux columns.
 #: Mirrors config/pipeline_config.yaml -> retriever.band_prefixes.
@@ -84,8 +99,14 @@ _FLUX_EXCLUDE_SUBSTRINGS = ("err", "unc", "flag", "wht", "weight")
 
 # ── Data release locations (documented in README.md "Data Access") ──────────
 
-#: CEERS DR1 published data release landing page (fallback download source).
-CEERS_DR1_URL = "https://ceers.github.io/dr06.html"
+#: CEERS DR1.0 photometric + physical-parameter catalogue (Cox et al. 2025):
+#: direct gzipped-FITS download, not an HTML landing page. Also archived on
+#: MAST under DOI https://doi.org/10.17909/z7p0-8481, but that DOI's CAOM
+#: index only exposes CEERS *imaging* HLSP products via astroquery — the
+#: catalogue itself isn't a queryable astroquery.mast.Observations product
+#: (verified empirically; see module docstring), so this direct URL is the
+#: fallback download source.
+CEERS_DR1_URL = "https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz"
 
 #: JADES DR1 HLSP landing page on MAST (fallback download source).
 JADES_DR1_URL = "https://archive.stsci.edu/hlsp/jades"
@@ -136,7 +157,7 @@ class MASTRetriever:
 
         Tries `astroquery.mast` first (CEERS is JWST proposal ID 1345); if
         that does not yield a usable product, falls back to a direct HTTPS
-        download from the published data release page (`CEERS_DR1_URL`).
+        download of the gzipped-FITS catalogue file (`CEERS_DR1_URL`).
 
         Parameters
         ----------
@@ -157,10 +178,7 @@ class MASTRetriever:
         except Exception as exc:  # noqa: BLE001 - any failure triggers documented fallback
             logger.warning(
                 "astroquery.mast retrieval of CEERS DR1 failed (%s: %s). Falling back to "
-                "direct HTTPS download from the published data release page %s. "
-                "NOTE: that page is an HTML landing page, not a direct file link — verify "
-                "the saved payload at %s is really the catalogue and update "
-                "config/pipeline_config.yaml with the resolved direct-download URL once known.",
+                "direct HTTPS download of the DR1.0 catalogue file %s -> %s.",
                 type(exc).__name__,
                 exc,
                 CEERS_DR1_URL,
@@ -219,6 +237,15 @@ class MASTRetriever:
         releases, so any failure here (including no matching products) is
         treated as "astroquery access unavailable" by the caller, which
         falls back to the documented HTTPS download.
+
+        Note: the CEERS DR1.0 photometric catalogue (Cox et al. 2025) is
+        *not* currently discoverable this way even though it is archived on
+        MAST under DOI https://doi.org/10.17909/z7p0-8481 — that DOI's CAOM
+        index only contains CEERS HLSP *imaging* products
+        (``obs_collection="HLSP", provenance_name="CEERS"`` -> 48 rows, all
+        ``dataproduct_type="image"`` / ``productType="SCIENCE"``, verified
+        empirically). This query is kept in case MAST indexes the catalogue
+        as a product in a future release.
         """
         from astroquery.mast import Observations
 
@@ -268,13 +295,29 @@ class MASTRetriever:
 
     @staticmethod
     def _download_via_https(url: str, output_path: Path, timeout: int = 60) -> None:
-        """Stream a URL to disk. Shared fallback path for fetch_ceers/fetch_jades."""
+        """Stream a URL to disk. Shared fallback path for fetch_ceers/fetch_jades.
+
+        If `url` ends in ``.gz``, the downloaded bytes are transparently
+        gunzipped so `output_path` always contains the plain FITS/CSV file
+        (the CEERS DR1.0 catalogue is served gzipped).
+        """
         response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
-        with open(output_path, "wb") as fh:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    fh.write(chunk)
+
+        if url.endswith(".gz"):
+            gz_path = output_path.with_name(output_path.name + ".gz")
+            with open(gz_path, "wb") as fh:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        fh.write(chunk)
+            with gzip.open(gz_path, "rb") as src, open(output_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            gz_path.unlink()
+        else:
+            with open(output_path, "wb") as fh:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        fh.write(chunk)
 
     # ── Load / validate ──────────────────────────────────────────────────
 

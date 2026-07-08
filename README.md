@@ -166,7 +166,7 @@ until real MAST data has been retrieved.
 
 | Survey | Archive | Catalogue | ~Size |
 |--------|---------|-----------|-------|
-| CEERS DR1 | [MAST](https://ceers.github.io/dr06.html) | `ceers_dr1.fits` | ~500 MB |
+| CEERS DR1 | [TACC](https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz) (DOI: [10.17909/z7p0-8481](https://doi.org/10.17909/z7p0-8481)) | `ceers_dr1.fits` | ~200 MB |
 | JADES DR1 | [MAST HLSP](https://archive.stsci.edu/hlsp/jades) | `jades_dr1.fits` | ~1.2 GB |
 | COSMOS-Web | [IRSA](https://cosmos.astro.caltech.edu/page/cosmosweb) | `cosmos_web_early.fits` | ~800 MB |
 
