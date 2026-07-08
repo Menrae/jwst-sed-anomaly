@@ -19,32 +19,36 @@ Data provenance and fallback behaviour
 ---------------------------------------
 CEERS and JADES DR1 catalogues are not exposed through a stable,
 query-criteria-friendly `astroquery.mast.Observations` interface the way
-single-visit HST/JWST observations are. This module therefore always
-*attempts* an astroquery-based MAST lookup first (best-effort; the exact
-proposal IDs / collections used are noted on each method), and if that
-fails for any reason (import error, empty result set, network error) it
-falls back to a direct HTTPS download documented in the project README:
+single-visit HST/JWST observations are.
+
+CEERS is a confirmed exception: its DR1.0 photometric + physical-parameter
+catalogue (Cox et al. 2025, ~87,000 galaxies, 14 filters) is fetched via a
+direct HTTPS download and does *not* attempt astroquery.mast at all. This
+was verified empirically, not assumed: proposal_id=1345 returns 5,568
+CAOM-indexed observations (all `image`/`spectrum` pipeline products, no
+catalogue), and `obs_collection="HLSP", provenance_name="CEERS"` returns
+only 48 rows, all `dataproduct_type="image"` / `productType="SCIENCE"`. The
+catalogue is not registered as a discoverable astroquery product under any
+query, so a filename-pattern filter would still never match — it would just
+pay the cost of a slow (multi-minute), always-failing query first. Going
+straight to the direct URL is both correct and materially faster:
 
     CEERS DR1 : https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz
     JADES DR1 : https://archive.stsci.edu/hlsp/jades
 
-The CEERS URL is the direct, gzipped FITS catalogue file published alongside
-Cox et al. (2025) (the CEERS DR1.0 photometric + physical-parameter catalogue,
-~87,000 galaxies, 14 filters; also archived on MAST under DOI
-https://doi.org/10.17909/z7p0-8481) — verified to serve
-``Content-Type: application/x-gzip`` rather than HTML. Note that this DOI
-covers the CEERS HLSP collection's *imaging* products in MAST's queryable
-CAOM index; the photometric catalogue itself is not registered there as a
-discoverable `astroquery.mast.Observations` product (confirmed empirically:
-querying ``obs_collection="HLSP", provenance_name="CEERS"`` returns only
-``dataproduct_type="image"`` / ``productType="SCIENCE"`` rows, never a
-catalogue), which is why the direct TACC-hosted URL is required.
+The CEERS URL is a direct, gzipped FITS file — verified via HTTP HEAD to
+serve ``Content-Type: application/x-gzip`` — also archived on MAST under DOI
+https://doi.org/10.17909/z7p0-8481, though (per above) that DOI only
+indexes CEERS's *imaging* HLSP products in MAST's CAOM, not this catalogue.
 
-The JADES URL remains an HTML landing page rather than a direct file link, so
-that fallback download is logged loudly (``logger.warning``) with a note
-that the operator should confirm the retrieved payload is really the
-catalogue file and not an HTML page, and update ``config/pipeline_config.yaml``
-with the resolved direct-download URL once available.
+JADES still *attempts* an astroquery-based MAST lookup first (best-effort),
+and if that fails for any reason (import error, empty result set, network
+error) it falls back to a direct HTTPS download of the URL above, which is
+an HTML landing page rather than a direct file link — so that fallback
+download is logged loudly (``logger.warning``) with a note that the
+operator should confirm the retrieved payload is really the catalogue file
+and not an HTML page, and update ``config/pipeline_config.yaml`` with the
+resolved direct-download URL once available.
 
 Populated by: Claude Code Prompt 2.1
 """
@@ -153,11 +157,17 @@ class MASTRetriever:
     # ── Fetch methods ─────────────────────────────────────────────────────
 
     def fetch_ceers(self, output_path: Optional[Union[str, Path]] = None) -> Path:
-        """Download the CEERS DR1 photometric catalogue.
+        """Download the CEERS DR1.0 photometric catalogue (Cox et al. 2025).
 
-        Tries `astroquery.mast` first (CEERS is JWST proposal ID 1345); if
-        that does not yield a usable product, falls back to a direct HTTPS
-        download of the gzipped-FITS catalogue file (`CEERS_DR1_URL`).
+        Downloads directly from the confirmed-working TACC-hosted URL
+        (`CEERS_DR1_URL`). astroquery.mast is deliberately *not* attempted:
+        verified empirically that this catalogue is not a discoverable
+        `astroquery.mast.Observations` product under any query (proposal_id
+        1345 -> 5,568 imaging/spectrum observations, none a catalogue;
+        obs_collection="HLSP" + provenance_name="CEERS" -> 48 rows, all
+        imaging) — see the module docstring for details. A filename filter
+        can't fix "the product isn't indexed at all", so skipping straight
+        to the direct URL avoids a slow, always-failing query.
 
         Parameters
         ----------
@@ -172,19 +182,8 @@ class MASTRetriever:
         output_path = Path(output_path) if output_path else self.raw_dir / "ceers_dr1.fits"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            self._fetch_ceers_via_mast(output_path)
-            logger.info("Fetched CEERS DR1 catalogue via astroquery.mast -> %s", output_path)
-        except Exception as exc:  # noqa: BLE001 - any failure triggers documented fallback
-            logger.warning(
-                "astroquery.mast retrieval of CEERS DR1 failed (%s: %s). Falling back to "
-                "direct HTTPS download of the DR1.0 catalogue file %s -> %s.",
-                type(exc).__name__,
-                exc,
-                CEERS_DR1_URL,
-                output_path,
-            )
-            self._download_via_https(CEERS_DR1_URL, output_path)
+        self._download_via_https(CEERS_DR1_URL, output_path)
+        logger.info("Fetched CEERS DR1.0 catalogue -> %s", output_path)
 
         return output_path
 
@@ -228,43 +227,6 @@ class MASTRetriever:
         return output_path
 
     # ── astroquery.mast helpers (best-effort primary path) ─────────────────
-
-    def _fetch_ceers_via_mast(self, output_path: Path) -> None:
-        """Best-effort CEERS retrieval via astroquery.mast.Observations.
-
-        CEERS is JWST proposal ID 1345. This is a best-effort lookup: MAST's
-        holdings and product naming for CEERS have changed across data
-        releases, so any failure here (including no matching products) is
-        treated as "astroquery access unavailable" by the caller, which
-        falls back to the documented HTTPS download.
-
-        Note: the CEERS DR1.0 photometric catalogue (Cox et al. 2025) is
-        *not* currently discoverable this way even though it is archived on
-        MAST under DOI https://doi.org/10.17909/z7p0-8481 — that DOI's CAOM
-        index only contains CEERS HLSP *imaging* products
-        (``obs_collection="HLSP", provenance_name="CEERS"`` -> 48 rows, all
-        ``dataproduct_type="image"`` / ``productType="SCIENCE"``, verified
-        empirically). This query is kept in case MAST indexes the catalogue
-        as a product in a future release.
-        """
-        from astroquery.mast import Observations
-
-        obs = Observations.query_criteria(obs_collection="JWST", proposal_id="1345")
-        if len(obs) == 0:
-            raise RuntimeError("astroquery.mast returned no CEERS (proposal 1345) observations")
-
-        products = Observations.get_product_list(obs)
-        catalog_products = products[
-            [str(t).lower().endswith((".fits", ".csv")) for t in products["productFilename"]]
-        ]
-        if len(catalog_products) == 0:
-            raise RuntimeError("astroquery.mast returned no downloadable CEERS catalog products")
-
-        manifest = Observations.download_products(
-            catalog_products[:1], download_dir=str(output_path.parent)
-        )
-        downloaded = Path(manifest["Local Path"][0])
-        downloaded.replace(output_path)
 
     def _fetch_jades_via_mast(self, output_path: Path) -> None:
         """Best-effort JADES retrieval via astroquery.mast.Observations.

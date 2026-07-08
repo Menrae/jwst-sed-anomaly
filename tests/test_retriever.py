@@ -26,19 +26,17 @@ def retriever(tmp_path) -> MASTRetriever:
 # ── fetch_* fallback behaviour ────────────────────────────────────────────
 
 
-def test_fetch_ceers_falls_back_to_https_when_astroquery_fails(retriever, tmp_path, mocker):
-    """If the astroquery.mast path raises, fetch_ceers must fall back to the
-    documented HTTPS download rather than propagating the error."""
-    mock_mast = mocker.patch.object(
-        MASTRetriever, "_fetch_ceers_via_mast", side_effect=RuntimeError("no astroquery access")
-    )
+def test_fetch_ceers_downloads_directly_without_astroquery(retriever, tmp_path, mocker):
+    """CEERS DR1.0 (Cox et al. 2025) is not a discoverable astroquery.mast
+    product (verified empirically -- see retriever.py module docstring), so
+    fetch_ceers must go straight to the direct HTTPS download and must not
+    attempt astroquery at all."""
     mock_https = mocker.patch.object(MASTRetriever, "_download_via_https")
 
     out_path = tmp_path / "ceers_dr1.fits"
     result = retriever.fetch_ceers(out_path)
 
     assert result == out_path
-    mock_mast.assert_called_once()
     mock_https.assert_called_once()
     called_url = mock_https.call_args.args[0]
     assert called_url == CEERS_DR1_URL
@@ -71,10 +69,6 @@ def test_download_via_https_never_called_with_real_network(retriever, tmp_path, 
     mock_response.iter_content.return_value = [gzip_module.compress(dummy_content)]
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
-
-    mocker.patch.object(
-        MASTRetriever, "_fetch_ceers_via_mast", side_effect=RuntimeError("no astroquery")
-    )
 
     out_path = tmp_path / "ceers_dr1.fits"
     retriever.fetch_ceers(out_path)
