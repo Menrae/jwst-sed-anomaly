@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Anomalous JWST SEDs — UW Autumn Undergraduate Research Symposium Poster</title>
+<style>
+  /* ───────────────────────────────────────────────────────────────────────
+     Sizing model: the poster itself is laid out entirely in mm (a physical,
+     DPI-independent CSS unit) so it is exactly 1189mm x 841mm (A0 landscape)
+     whether viewed on screen or printed at "Actual size / 100%". Typography
+     is sized in px per the 24px body-text floor requested for 1.5m legibility.
+     At 96dpi, 1189mm x 841mm = 4493.9px x 3179.9px if a tool needs to
+     rasterize the page (e.g. headless-Chrome --print-to-pdf or a screenshot
+     pipeline) rather than printing physically.
+     ─────────────────────────────────────────────────────────────────────── */
+
+  :root {
+    --uw-purple: #4B2E83;
+    --uw-gold: #B7A57A;
+
+    /* Ordinal ramp (one hue, monotone lightness) for the 4 pipeline stages —
+       order encodes pipeline sequence, all steps keep white text >= 4.5:1 */
+    --stage-1: #6E56A3;
+    --stage-2: #5D3F99;
+    --stage-3: #4B2E83;
+    --stage-4: #37205F;
+
+    --ink: #1A1A1A;
+    --ink-muted: #4A4A4A;
+    --surface: #FFFFFF;
+    --surface-tint: #F8F6F2;
+    --gold-tint: #F3EEE1;
+    --line: #D8D2C4;
+    --grey-placeholder: #E3E3E3;
+    --grey-placeholder-border: #B8B8B8;
+
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font);
+    color: var(--ink);
+    background: #6b6b6b;
+  }
+
+  /* On-screen convenience chrome — hidden entirely when printed */
+  .screen-note {
+    max-width: 1189mm;
+    margin: 6mm auto 0 auto;
+    padding: 4mm 8mm;
+    background: #fff9e6;
+    border: 1px solid #d8c37a;
+    border-radius: 2mm;
+    font-size: 15px;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+
+  .poster-wrapper {
+    display: flex;
+    justify-content: center;
+    padding: 10mm 0 20mm 0;
+    overflow-x: auto; /* the poster is physically 1189mm wide — scroll rather than squash on narrow viewports */
+  }
+
+  .poster {
+    width: 1189mm;
+    height: 841mm;
+    flex: none; /* never let flexbox shrink this fixed-size physical page */
+    background: var(--surface);
+    box-shadow: 0 0 6mm rgba(0,0,0,0.35);
+
+    display: grid;
+    /* Deterministic mm tracks (not fr) — measured to render byte-identically
+       between on-screen layout and the Chromium print/PDF pipeline, which
+       was observed to round mixed fr+mm row tracks slightly differently and
+       clip the last flowchart stage in printed output. */
+    grid-template-columns: repeat(4, 283.5mm);
+    grid-template-rows: 128mm 352.5mm 314.5mm;
+    gap: 9mm;
+    padding: 14mm;
+  }
+
+  /* ── Panel scaffolding shared by every content cell ─────────────────── */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid var(--line);
+    border-radius: 3mm;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .panel-header {
+    flex: 0 0 auto;
+    background: var(--uw-purple);
+    color: #fff;
+    font-weight: 700;
+    font-size: 30px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 6mm 8mm;
+    border-bottom: 2mm solid var(--uw-gold);
+  }
+
+  .panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 8mm 9mm;
+    display: flex;
+    flex-direction: column;
+    gap: 5mm;
+  }
+
+  .bullets {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6mm;
+  }
+
+  .bullets li {
+    position: relative;
+    padding-left: 11mm;
+    font-size: 26px;
+    line-height: 1.42;
+    color: var(--ink);
+  }
+
+  .bullets li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.45em;
+    width: 5.5mm;
+    height: 5.5mm;
+    background: var(--uw-gold);
+    border-radius: 1mm;
+  }
+
+  .bullets.dense li { font-size: 24px; }
+
+  /* ── Row 1 — Header ──────────────────────────────────────────────────── */
+  .header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    background: var(--uw-purple);
+    border-radius: 3mm;
+    color: #fff;
+    display: grid;
+    grid-template-columns: 150mm 751mm 220mm; /* deterministic, see .poster comment */
+    align-items: center;
+    gap: 8mm;
+    padding: 8mm 12mm;
+    border: 1px solid var(--uw-purple);
+  }
+
+  .logo-placeholder {
+    width: 130mm;
+    height: 90mm;
+    background: #fff;
+    border: 2mm dashed var(--uw-gold);
+    border-radius: 3mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--uw-purple);
+    text-align: center;
+  }
+
+  .logo-placeholder .mark {
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+  }
+
+  .logo-placeholder .caption {
+    font-size: 18px;
+    color: var(--ink-muted);
+    margin-top: 2mm;
+  }
+
+  .header-titleblock .eyebrow {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--uw-gold);
+    margin: 0 0 4mm 0;
+  }
+
+  .header-titleblock h1 {
+    margin: 0 0 6mm 0;
+    font-size: 76px;
+    line-height: 1.12;
+    font-weight: 800;
+    max-width: 100%;
+  }
+
+  .header-titleblock .byline {
+    font-size: 30px;
+    font-weight: 400;
+    color: #EDE7F5;
+  }
+
+  .header-titleblock .byline strong {
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .header-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    text-align: right;
+    gap: 4mm;
+    border-left: 1px solid rgba(255,255,255,0.35);
+    padding-left: 8mm;
+    height: 100%;
+  }
+
+  .header-meta .dept {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .header-meta .date {
+    font-size: 24px;
+    color: var(--uw-gold);
+  }
+
+  .header-meta .place {
+    font-size: 22px;
+    color: #EDE7F5;
+  }
+
+  /* ── Row 2 / Col 2 — flowchart ───────────────────────────────────────── */
+  .flowchart-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+  }
+
+  .flowchart-wrap svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ── Placeholder figure boxes (Results / Top Outlier SEDs) ──────────── */
+  .figure-placeholder {
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--grey-placeholder);
+    border: 1.5mm dashed var(--grey-placeholder-border);
+    border-radius: 2mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f6f6f;
+    font-size: 26px;
+    font-weight: 600;
+    text-align: center;
+    padding: 6mm;
+  }
+
+  .figure-caption {
+    flex: 0 0 auto;
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink-muted);
+    font-style: italic;
+  }
+
+  .sed-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 3mm;
+  }
+
+  .sed-tile {
+    background: var(--grey-placeholder);
+    border: 1mm dashed var(--grey-placeholder-border);
+    border-radius: 1.5mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7a7a7a;
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  /* ── Row 3 / Col 3 — Null hypothesis hero number ─────────────────────── */
+  .hero-panel .panel-body {
+    background: var(--gold-tint);
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 4mm;
+  }
+
+  .hero-label {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  .hero-number {
+    font-size: 168px;
+    font-weight: 800;
+    color: var(--uw-purple);
+    line-height: 1;
+    font-variant-numeric: proportional-nums;
+  }
+
+  .hero-sub {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .hero-interp {
+    font-size: 25px;
+    line-height: 1.4;
+    color: var(--ink-muted);
+    max-width: 90%;
+  }
+
+  /* ── Row 3 / Col 4 — QR + references ─────────────────────────────────── */
+  .qr-refs-body {
+    gap: 6mm;
+  }
+
+  .qr-row {
+    display: flex;
+    align-items: center;
+    gap: 8mm;
+    flex: 0 0 auto;
+  }
+
+  .qr-placeholder {
+    flex: 0 0 auto;
+    width: 68mm;
+    height: 68mm;
+    background: #fff;
+    border: 1.5mm solid var(--uw-purple);
+    border-radius: 2mm;
+    padding: 2mm;
+  }
+
+  .qr-placeholder svg { width: 100%; height: 100%; display: block; }
+
+  .qr-caption {
+    font-size: 24px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  .qr-caption strong { color: var(--uw-purple); }
+
+  .refs-title {
+    font-size: 24px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--uw-purple);
+    border-top: 1px solid var(--line);
+    padding-top: 5mm;
+    margin: 0;
+  }
+
+  .refs-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5mm;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .refs-list li {
+    font-size: 21px;
+    line-height: 1.35;
+    color: var(--ink);
+    padding-left: 6mm;
+    position: relative;
+  }
+
+  .refs-list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 3mm;
+    height: 3mm;
+    background: var(--uw-purple);
+    border-radius: 50%;
+  }
+
+  /* ── Print ────────────────────────────────────────────────────────────
+     mm units are physical, so no rescaling is needed for print — this
+     block only strips the screen-only backdrop/shadow and locks the page
+     box to exactly A0 landscape. */
+  @media print {
+    @page {
+      size: 1189mm 841mm;
+      margin: 0;
+    }
+    html, body {
+      background: #fff;
+      width: 1189mm;
+      height: 841mm;
+    }
+    .screen-note { display: none; }
+    .poster-wrapper { padding: 0; }
+    .poster { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="screen-note">
+    This page is set to physical A0 landscape (1189&nbsp;mm × 841&nbsp;mm) using CSS mm units.
+    Print at <strong>Actual Size / 100% scale</strong> (not "Fit to page") for correct output.
+    At 96&nbsp;dpi this corresponds to 4494 × 3180&nbsp;px if rasterizing instead of printing.
+  </div>
+
+  <div class="poster-wrapper">
+    <div class="poster">
+
+      <!-- ═══════════════════════ Row 1 — Header ═══════════════════════ -->
+      <header class="header">
+        <div class="logo-placeholder">
+          <div class="mark">UW</div>
+          <div class="caption">University of Washington<br>logo placeholder</div>
+        </div>
+
+        <div class="header-titleblock">
+          <p class="eyebrow">UW Autumn Undergraduate Research Symposium</p>
+          <h1>A Search for Anomalous Spectral Energy Distributions in
+            High-Redshift Galaxies with JWST: A Data-Driven Approach</h1>
+          <p class="byline"><strong>Aasha</strong> &middot; Department of Astronomy, University of Washington</p>
+        </div>
+
+        <div class="header-meta">
+          <div class="dept">Dept. of Astronomy</div>
+          <div class="place">University of Washington, Seattle, WA</div>
+          <div class="date">[Symposium Date — e.g., November 2026]</div>
+        </div>
+      </header>
+
+      <!-- ═══════════════ Row 2 / Col 1 — Motivation & Background ══════ -->
+      <section class="panel" style="grid-column: 1; grid-row: 2;">
+        <div class="panel-header">Motivation &amp; Background</div>
+        <div class="panel-body">
+          <ul class="bullets">
+            <li>JWST/NIRCam photometric surveys (CEERS, JADES) now provide catalogs
+              large and deep enough to search systematically for galaxies whose SEDs
+              deviate from standard population-synthesis expectations.</li>
+            <li>Unsupervised anomaly detection has precedent in astronomy&mdash;outlier
+              searches in SDSS spectra and quasar catalogs&mdash;but has seen little
+              systematic application to JWST-era photometric residuals.</li>
+            <li>Even a well-characterized null result constitutes a quantitative,
+              galactic-scale upper limit on non-standard astrophysical processes&mdash;the
+              deliberately conservative framing motivating this analysis.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ═══════════════ Row 2 / Col 2 — Data & Methods (flowchart) ═══ -->
+      <section class="panel" style="grid-column: 2; grid-row: 2;">
+        <div class="panel-header">Data &amp; Methods</div>
+        <div class="panel-body">
+          <div class="flowchart-wrap">
+            <svg viewBox="0 0 260 340" xmlns="http://www.w3.org/2000/svg" role="img"
+                 aria-label="Four-stage pipeline: Retriever, Standardise, Quality/Anomaly, Output">
+
+              <!-- Stage 1: Retriever -->
+              <rect x="10" y="6" width="240" height="60" rx="6" fill="#6E56A3"></rect>
+              <text x="130" y="28" text-anchor="middle" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700">1&#8201;&middot;&#8201;RETRIEVER</text>
+              <text x="130" y="46" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="10.5">pipeline/retriever.py</text>
+              <text x="130" y="59" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="9.5" font-style="italic">&#8776; tsdat retriever.yaml + reader</text>
+
+              <!-- Arrow 1→2 -->
+              <line x1="130" y1="66" x2="130" y2="92" stroke="#B7A57A" stroke-width="3"></line>
+              <polygon points="130,100 124,88 136,88" fill="#B7A57A"></polygon>
+              <text x="145" y="87" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#4A4A4A">Raw DataFrame</text>
+              <text x="145" y="97" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#4A4A4A">(ra, dec, z_phot, fluxes)</text>
+
+              <!-- Stage 2: Standardise -->
+              <rect x="10" y="102" width="240" height="60" rx="6" fill="#5D3F99"></rect>
+              <text x="130" y="124" text-anchor="middle" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700">2&#8201;&middot;&#8201;STANDARDISE&#8201;/&#8201;a1</text>
+              <text x="130" y="142" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="10.5">pipeline/standardise.py</text>
+              <text x="130" y="155" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="9.5" font-style="italic">&#8776; tsdat dataset.yaml + converter</text>
+
+              <!-- Arrow 2→3 -->
+              <line x1="130" y1="162" x2="130" y2="188" stroke="#B7A57A" stroke-width="3"></line>
+              <polygon points="130,196 124,184 136,184" fill="#B7A57A"></polygon>
+              <text x="145" y="183" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#4A4A4A">Residual Dataset</text>
+              <text x="145" y="193" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#4A4A4A">(xarray / NetCDF, level a1)</text>
+
+              <!-- Stage 3: Quality / Anomaly -->
+              <rect x="10" y="198" width="240" height="60" rx="6" fill="#4B2E83"></rect>
+              <text x="130" y="220" text-anchor="middle" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700">3&#8201;&middot;&#8201;QUALITY&#8201;/&#8201;ANOMALY&#8201;/&#8201;b1</text>
+              <text x="130" y="238" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="10.5">pipeline/quality.py</text>
+              <text x="130" y="251" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="9.5" font-style="italic">&#8776; tsdat quality.yaml + checkers</text>
+
+              <!-- Arrow 3→4 -->
+              <line x1="130" y1="258" x2="130" y2="284" stroke="#B7A57A" stroke-width="3"></line>
+              <polygon points="130,292 124,280 136,280" fill="#B7A57A"></polygon>
+              <text x="145" y="279" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#4A4A4A">Anomaly-Scored Dataset</text>
+              <text x="145" y="289" font-family="Helvetica, Arial, sans-serif" font-size="9" fill="#4A4A4A">(level b1)</text>
+
+              <!-- Stage 4: Output -->
+              <rect x="10" y="294" width="240" height="42" rx="6" fill="#37205F"></rect>
+              <text x="130" y="313" text-anchor="middle" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700">4&#8201;&middot;&#8201;OUTPUT</text>
+              <text x="130" y="328" text-anchor="middle" fill="#EDE7F5" font-family="Helvetica, Arial, sans-serif" font-size="10">pipeline/output.py &#8226; &#8776; tsdat storage layer</text>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════ Row 2 / Col 3 — Results (placeholder) ════════ -->
+      <section class="panel" style="grid-column: 3; grid-row: 2;">
+        <div class="panel-header">Results</div>
+        <div class="panel-body">
+          <div class="figure-placeholder">FIGURE PLACEHOLDER<br>Anomaly rate vs. photometric redshift</div>
+          <p class="figure-caption">Figure 1. Fraction of sources with ensemble anomaly
+            score &gt; 0.8, binned in &Delta;z = 0.5 redshift shells, with Poisson
+            error bars (placeholder &mdash; pending full-catalog run).</p>
+        </div>
+      </section>
+
+      <!-- ═══════════════ Row 2 / Col 4 — Top Outlier SEDs ══════════════ -->
+      <section class="panel" style="grid-column: 4; grid-row: 2;">
+        <div class="panel-header">Top Outlier SEDs</div>
+        <div class="panel-body">
+          <div class="sed-grid">
+            <div class="sed-tile">#1</div>
+            <div class="sed-tile">#2</div>
+            <div class="sed-tile">#3</div>
+            <div class="sed-tile">#4</div>
+            <div class="sed-tile">#5</div>
+            <div class="sed-tile">#6</div>
+            <div class="sed-tile">#7</div>
+            <div class="sed-tile">#8</div>
+            <div class="sed-tile">#9</div>
+            <div class="sed-tile">#10</div>
+          </div>
+          <p class="figure-caption">Figure 2. Observed photometry vs. best-fit continuum
+            for the 10 highest-ranked unexplained outliers (no AGN/emission-line match),
+            ranked by ensemble anomaly score (placeholder).</p>
+        </div>
+      </section>
+
+      <!-- ═══════════ Row 3 / Col 1-2 — Discussion & Conclusions ═══════ -->
+      <section class="panel" style="grid-column: 1 / 3; grid-row: 3;">
+        <div class="panel-header">Discussion &amp; Conclusions</div>
+        <div class="panel-body">
+          <ul class="bullets dense">
+            <li>A reproducible, ensemble anomaly pipeline (Isolation Forest + UMAP/DBSCAN)
+              flags a well-defined SED-outlier population directly from public JWST
+              photometric catalogs, with no survey-specific tuning required.</li>
+            <li>Cross-matching flagged sources against an AGN reference catalog
+              (Milliquas) and an emission-line-contamination criterion explains the
+              majority of anomalies as known astrophysical processes, not novel physics.</li>
+            <li>The residual &ldquo;unexplained&rdquo; population, once fully characterized,
+              sets a conservative, quantitative upper limit on non-standard interpretations
+              rather than constituting a detection claim.</li>
+            <li>Next steps: extend the pipeline to COSMOS-Web, and pursue spectroscopic
+              follow-up of the highest-confidence unexplained outliers.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ═══════════ Row 3 / Col 3 — Null Hypothesis Result ═══════════ -->
+      <section class="panel hero-panel" style="grid-column: 3; grid-row: 3;">
+        <div class="panel-header">Null Hypothesis Result</div>
+        <div class="panel-body">
+          <div class="hero-label">Redshift-dependence test</div>
+          <div class="hero-number">p&#8202;=&#8202;0.42</div>
+          <div class="hero-sub">(placeholder value)</div>
+          <p class="hero-interp">No statistically significant excess of unexplained SED
+            anomalies vs. redshift is detected above the AGN / emission-line contaminant
+            baseline &mdash; consistent with a well-characterized null result.</p>
+        </div>
+      </section>
+
+      <!-- ═══════════ Row 3 / Col 4 — QR code + references ═════════════ -->
+      <section class="panel" style="grid-column: 4; grid-row: 3;">
+        <div class="panel-header">Scan &amp; References</div>
+        <div class="panel-body qr-refs-body">
+          <div class="qr-row">
+            <div class="qr-placeholder" id="qrPlaceholder">
+              <svg id="qrSvg" viewBox="0 0 29 29" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <p class="qr-caption"><strong>Scan for the paper, code &amp; data</strong><br>
+              (placeholder &mdash; link to repository / preprint to be added)</p>
+          </div>
+
+          <p class="refs-title">Key References</p>
+          <ul class="refs-list">
+            <li>Finkelstein, S. L. et al. 2023, <em>ApJL</em> &mdash; CEERS survey overview</li>
+            <li>Eisenstein, D. J. et al. 2023, <em>arXiv</em> &mdash; JADES survey overview</li>
+            <li>Brammer, G. B., van Dokkum, P. G., &amp; Coppi, P. 2008, <em>ApJ</em> &mdash; EAZY photometric redshifts</li>
+            <li>Baron, D. &amp; Poznanski, D. 2017, <em>MNRAS</em> &mdash; outlier detection in SDSS spectra</li>
+            <li>Wright, J. T. et al. 2014, <em>ApJ</em> &mdash; the &#x11C; infrared technosignature search</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+    // Decorative QR-code-shaped placeholder (not a functional QR code):
+    // draws the three finder patterns plus a deterministic pseudo-random
+    // module field so it reads as "a QR code" at a glance without needing
+    // any external generator or network access.
+    (function drawFakeQR() {
+      var svg = document.getElementById('qrSvg');
+      var n = 29;
+      var ns = 'http://www.w3.org/2000/svg';
+
+      function rect(x, y, w, h, fill) {
+        var r = document.createElementNS(ns, 'rect');
+        r.setAttribute('x', x); r.setAttribute('y', y);
+        r.setAttribute('width', w); r.setAttribute('height', h);
+        r.setAttribute('fill', fill);
+        svg.appendChild(r);
+      }
+
+      rect(0, 0, n, n, '#ffffff');
+
+      function finder(ox, oy) {
+        rect(ox, oy, 7, 7, '#1A1A1A');
+        rect(ox + 1, oy + 1, 5, 5, '#ffffff');
+        rect(ox + 2, oy + 2, 3, 3, '#1A1A1A');
+      }
+      finder(0, 0);
+      finder(n - 7, 0);
+      finder(0, n - 7);
+
+      // simple deterministic hash so the pattern is stable across renders
+      function cellOn(x, y) {
+        var h = (x * 928371 + y * 123457 + x * y * 7919) % 1000;
+        return (h % 5) === 0 || (h % 7) === 0;
+      }
+
+      for (var y = 0; y < n; y++) {
+        for (var x = 0; x < n; x++) {
+          var inFinderTL = x < 8 && y < 8;
+          var inFinderTR = x > n - 9 && y < 8;
+          var inFinderBL = x < 8 && y > n - 9;
+          if (inFinderTL || inFinderTR || inFinderBL) continue;
+          if (cellOn(x, y)) rect(x, y, 1, 1, '#1A1A1A');
+        }
+      }
+    })();
+  </script>
+
+</body>
+</html>

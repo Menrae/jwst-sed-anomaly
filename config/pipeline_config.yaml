@@ -6,14 +6,14 @@
 pipeline_name: jwst-sed-anomaly
 data_level: a1                        # raw-to-processed output level (tsdat convention)
 version: "0.1.0"
-last_updated: null                    # set by Prompt A.1 updater
-git_commit_hash: null                 # set by Prompt A.1 updater
+last_updated: "2026-07-08T05:33:15Z"
+git_commit_hash: "36612503a5ca8c883755e556deefcbbfaa044558"
 
 # ── Retriever (pipeline/retriever.py → MASTRetriever) ────────────────────────
 retriever:
   surveys:
     - name: ceers
-      url: "https://ceers.github.io/dr06.html"
+      url: "https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz"  # actual CEERS_DR1_URL used by fetch_ceers() (the ceers.github.io landing page never contained the catalogue file)
       output_file: "data/raw/ceers_dr1.fits"
       mast_collection: "CEERS"
     - name: jades
@@ -38,10 +38,13 @@ retriever:
     - F410M
     - F444W
     - F770W
-  data_provenance:             # populated by Prompt A.1 updater
-    ceers_download_url: null
-    jades_download_url: null
-    access_date: null
+  data_provenance:
+    ceers_download_url: "https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz"
+    ceers_access_date: "2026-07-08"           # data/raw/ceers_dr1.fits fetched via fetch_ceers() (commit 50355d8)
+    jades_download_url: null                  # JADES not yet downloaded; MASTRetriever.fetch_jades() not run in this analysis
+    jades_access_date: null
+    agn_catalogue_download_url: "https://quasars.org/milliquas.fits.zip"
+    agn_catalogue_access_date: "2026-07-08"   # data/raw/milliquas_v8.fits (Milliquas v8 Final Edition, 2023), commit 5c9fa5e
 
 # ── Standardiser (pipeline/standardise.py → SEDStandardiser) ─────────────────
 standardiser:
@@ -55,7 +58,7 @@ standardiser:
     z_min: 0.01
     z_max: 12.0
     z_step: 0.01
-    param_file: "config/zphot.param"
+    param_file: null            # zphot.param is generated dynamically per run inside the EAZY output_dir (SEDStandardiser._write_eazy_param); no static file lives at config/zphot.param
   output_filename_convention: "{survey}.a1.{date}.{time}.nc"
 
 # ── Quality / Anomaly Detection (pipeline/quality.py) ─────────────────────────
@@ -87,7 +90,11 @@ quality:
   dbscan:
     eps: 0.5
     min_samples: 5
-  checkers_used: null                 # populated by Prompt A.1 updater
+  checkers_used:                       # AnomalyChecker subclasses instantiated by apply_quality_pipeline() in pipeline/quality.py
+    - IsolationForestChecker
+    - UMAPDBSCANChecker
+    - _PrecomputedScore
+    - EnsembleChecker
 
 # ── Storage / Output (pipeline/output.py) ─────────────────────────────────────
 storage:

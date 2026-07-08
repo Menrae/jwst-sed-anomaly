@@ -1,0 +1,257 @@
+\documentclass[twocolumn]{aastex631}
+
+% ── Standard AAS preamble packages ──────────────────────────────────────────
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+\shorttitle{Anomalous SEDs in High-$z$ JWST Galaxies}
+\shortauthors{Aasha}
+
+\begin{document}
+
+\title{A Search for Anomalous Spectral Energy Distributions in High-Redshift
+Galaxies with JWST: A Data-Driven Approach}
+
+% ── Author placeholder / UW affiliation block ──────────────────────────────
+\author[0000-0000-0000-0000]{Aasha}
+\affiliation{Department of Astronomy, University of Washington, Box 351580,
+Seattle, WA 98195, USA}
+\email{aasha@uw.edu}
+
+% \author{Advisor Name}
+% \affiliation{Department of Astronomy, University of Washington, Box 351580,
+% Seattle, WA 98195, USA}
+
+\begin{abstract}
+
+The James Webb Space Telescope (JWST) has produced the deepest and most
+complete rest-frame optical/near-infrared photometric catalogs of
+high-redshift galaxies to date, enabling systematic searches for sources
+whose spectral energy distributions (SEDs) deviate from standard
+population-synthesis expectations. We present a data-driven pipeline that
+identifies statistically anomalous SEDs among $z \gtrsim 0.5$ galaxies in
+the CEERS and JADES JWST/NIRCam photometric catalogs. Photometric redshifts
+and best-fit template SEDs are derived with EAZY; per-band residuals
+between observed and best-fit photometry are then scored for anomalies
+using an ensemble of Isolation Forest and UMAP+DBSCAN, and cross-matched
+against known active galactic nucleus (AGN) and emission-line-galaxy
+catalogs to separate genuine outliers from well-understood astrophysical
+contaminants. We report the resulting anomaly rate as a function of
+redshift and characterize the residual "unexplained" population that
+survives contaminant removal. We interpret this population within a
+deliberately conservative framework for galactic-scale technosignature and
+biosignature search limits, noting that even a well-characterized null
+result constitutes a quantitative upper limit on non-standard astrophysical
+processes at cosmological scale. This placeholder abstract will be updated
+once the Phase 3/4 analysis on the full real MAST catalogs is complete.
+
+\end{abstract}
+
+\keywords{galaxies: high-redshift --- galaxies: photometry --- methods:
+data analysis --- methods: statistical --- astrobiology}
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+
+[PLACEHOLDER --- JWST context] The James Webb Space Telescope has
+transformed the study of galaxy evolution at $z > 5$ by providing
+sensitive, high-angular-resolution NIRCam and MIRI imaging across a
+wavelength baseline unattainable from the ground or with prior space
+missions. Large-area imaging surveys such as CEERS \citep{Finkelstein2023},
+JADES \citep{Eisenstein2023}, and COSMOS-Web \citep{Casey2023} have
+assembled photometric catalogs of hundreds of thousands of galaxies
+spanning cosmic noon through the epoch of reionization. These catalogs are
+large and homogeneous enough to support systematic, population-level
+searches for statistically rare objects, rather than only targeted
+follow-up of individually identified curiosities.
+
+[PLACEHOLDER --- ML anomaly detection in astrophysics] Unsupervised machine
+learning methods have an established track record of surfacing unusual
+sources in large astronomical datasets that would be impractical to find by
+visual inspection alone, from outlier detection in SDSS spectra
+\citep{BaronPoznanski2017} to searches for spectroscopically unusual
+quasars \citep{Meusinger2012}. Applying similar techniques to JWST
+photometric residuals --- the difference between observed fluxes and the
+best-fit template SED at each source's photometric redshift --- offers a
+principled, reproducible way to flag galaxies whose broadband colors are
+not well described by standard stellar population synthesis models
+\citep{Reyes2023}, without requiring a predefined list of what an "anomaly"
+should look like.
+
+[PLACEHOLDER --- astrobiology motivation] A small subset of any such
+anomaly sample may, in principle, be astrophysically unexplained even after
+accounting for known contaminants such as AGN activity or strong
+emission-line contamination of broadband photometry. While the
+overwhelming prior expectation is that such residual anomalies reflect
+systematics in photometry, photometric redshifts, or template libraries, we
+adopt the deliberately conservative position that a well-characterized,
+reproducible anomaly pipeline is also the correct tool with which to place
+quantitative, galactic-scale upper limits on exotic interpretations,
+including technosignatures \citep{Wright2014} and biosignature-adjacent
+astrophysical scenarios \citep{LingamLoeb2019, Lacki2016}. This paper does
+not claim any detection; its purpose is methodological: to demonstrate a
+reproducible anomaly-detection pipeline and to characterize, at current
+survey depth, how large an unexplained population remains after standard
+astrophysical explanations are exhausted.
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Data}
+\label{sec:data}
+
+\subsection{CEERS}
+\label{sec:data-ceers}
+
+[PLACEHOLDER] We use the CEERS Data Release 1.0 photometric and
+physical-parameter catalog \citep{Finkelstein2023}, comprising
+NIRCam imaging across the CEERS pointings within the Extended Groth Strip.
+The catalog provides PSF-matched aperture photometry in the F090W, F115W,
+F150W, F200W, F277W, F356W, F410M, and F444W bands, along with LePHARE
+photometric redshift estimates. [PLACEHOLDER: final source counts, magnitude
+limits, and areal coverage to be filled in once the full-catalog run
+completes.]
+
+\subsection{JADES}
+\label{sec:data-jades}
+
+[PLACEHOLDER] We additionally draw on the JWST Advanced Deep Extragalactic
+Survey (JADES) Data Release 1 \citep{Eisenstein2023}, which reaches
+substantially fainter magnitude limits than CEERS over a smaller area,
+providing a complementary deep pencil-beam sample. [PLACEHOLDER: JADES
+retrieval is not yet complete at the time of this scaffold; final sample
+statistics to follow.]
+
+\subsection{Data Reduction}
+\label{sec:data-reduction}
+
+[PLACEHOLDER] Raw catalogs are retrieved directly from their public data
+release locations, normalized to a common column schema (right ascension,
+declination, photometric redshift, and per-band flux/flux-uncertainty
+pairs), and converted to a common flux unit ($\mu$Jy). Sources are required
+to fall within the survey's science redshift window and to have a minimum
+number of valid photometric bands (Section~\ref{sec:sed-fitting}) before
+proceeding to SED fitting.
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Methods}
+\label{sec:methods}
+
+\subsection{SED Fitting}
+\label{sec:sed-fitting}
+
+[PLACEHOLDER] Photometric redshifts and best-fit template SEDs are derived
+using EAZY \citep{Brammer2008} with the \texttt{tweak\_fsps\_QSF\_12\_v3}
+template set, itself built on Bruzual \& Charlot stellar population
+synthesis models \citep{BruzualCharlot2003}. [PLACEHOLDER: describe final
+adopted redshift grid, template combination weighting, and any priors
+applied.]
+
+\subsection{Residual Extraction}
+\label{sec:residual-extraction}
+
+[PLACEHOLDER] For each source, per-band photometric residuals are computed
+as $(f_{\rm obs} - f_{\rm model}) / \sigma_{\rm obs}$ relative to a smooth
+continuum model fit through the observed photometry, following the general
+SED-fitting residual framework reviewed by \citet{Conroy2013}. These
+residual vectors form the feature space for the anomaly detectors described
+below.
+
+\subsection{Anomaly Detection}
+\label{sec:anomaly-detection}
+
+[PLACEHOLDER] We score each source's residual vector using an ensemble of
+two complementary unsupervised anomaly detectors: an Isolation Forest,
+which isolates anomalous points via random recursive partitioning, and a
+UMAP dimensionality reduction followed by DBSCAN density-based clustering,
+which flags points that fail to join any density-connected cluster in the
+reduced embedding. Combining a global, tree-based method with a local,
+density-based method mirrors approaches used elsewhere in astronomical
+outlier detection \citep{BaronPoznanski2017, Reyes2023}.
+
+\subsection{Contaminant Removal}
+\label{sec:contaminant-removal}
+
+[PLACEHOLDER] Flagged sources are cross-matched on sky position against a
+reference AGN catalog (Milliquas) to identify anomalies plausibly explained
+by AGN continuum/emission-line contamination, and are separately checked
+for redshifted strong emission lines (e.g., Ly$\alpha$) falling within a
+broadband filter, which can locally inflate a single band's flux and
+masquerade as an SED anomaly \citep{Meusinger2012}. Sources matching either
+criterion are retained in the catalog but flagged as "explained" anomalies,
+distinct from the residual "unexplained" population discussed in
+Section~\ref{sec:results-unexplained}.
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Results}
+\label{sec:results}
+
+\subsection{Anomaly Rate}
+\label{sec:results-rate}
+
+[PLACEHOLDER: overall anomaly rate, broken down by survey and by which
+detector(s) flagged each source, to be filled in once the full pipeline run
+on real MAST catalogs completes. A summary table and figure will be added
+here once available.]
+
+\subsection{Redshift Evolution}
+\label{sec:results-redshift}
+
+[PLACEHOLDER: anomaly rate as a function of photometric redshift, binned in
+$\Delta z = 0.5$ shells, with Poisson uncertainties on the flagged count per
+bin (see \texttt{results/figures/anomaly\_rate\_vs\_redshift.pdf}).]
+
+\subsection{Unexplained Outliers}
+\label{sec:results-unexplained}
+
+[PLACEHOLDER: characterization of the subset of flagged sources that match
+neither the AGN nor emission-line contaminant criteria, including a summary
+table of the highest-ranked "unexplained" outliers by ensemble anomaly
+score (see \texttt{results/tables/top\_outliers.tex}).]
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Discussion}
+\label{sec:discussion}
+
+[PLACEHOLDER] We discuss the interpretation of the unexplained anomaly
+population in the context of (i) residual systematics in photometry,
+photometric redshifts, or template libraries; (ii) known but uncatalogued
+astrophysical contaminants (e.g., strong lensing, blended sources, rare
+transient contamination); and (iii) the deliberately conservative galactic-
+scale technosignature/biosignature interpretive framework motivated in
+Section~\ref{sec:intro} \citep{Wright2014, LingamLoeb2019, Lacki2016}. We
+emphasize that a well-characterized null result is itself a meaningful,
+quantitative constraint on the prevalence of non-standard processes at
+current survey depth and sample size.
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Conclusions}
+\label{sec:conclusions}
+
+[PLACEHOLDER] We have presented a reproducible, ensemble machine-learning
+pipeline for identifying anomalous SEDs among high-redshift JWST galaxies,
+and applied it to the CEERS and (forthcoming) JADES photometric catalogs.
+[PLACEHOLDER: summarize final anomaly rate, fraction explained by known
+contaminants, and headline redshift-dependence result once the full
+analysis is complete. Future work will extend the pipeline to COSMOS-Web
+and incorporate spectroscopic follow-up of the highest-confidence
+unexplained outliers.]
+
+\begin{acknowledgments}
+
+We thank the University of Washington Department of Astronomy for support
+of this undergraduate research project. [PLACEHOLDER: additional funding /
+mentorship acknowledgments.] This research uses publicly available data
+from the Mikulski Archive for Space Telescopes (MAST) at the Space
+Telescope Science Institute. The specific observations analyzed can be
+associated with JWST program(s) \#[PLACEHOLDER --- CEERS: 1345],
+\#[PLACEHOLDER --- JADES program ID], and \#[PLACEHOLDER --- COSMOS-Web
+program ID] via \dataset[DOI]{https://doi.org/10.17909/z7p0-8481}.
+
+\end{acknowledgments}
+
+\bibliographystyle{aasjournal}
+\bibliography{references}
+
+\end{document}
