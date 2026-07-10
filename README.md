@@ -126,6 +126,19 @@ pip install -r requirements.txt
 xarray, scikit-learn, umap-learn, eazy, pytest, …); exact conda-forge
 pins live in `../.devcontainer/environment.yml`.
 
+### EAZY templates & filters
+
+`pip install eazy` (the PyPI name for [`eazy-py`](https://github.com/gbrammer/eazy-py))
+installs the fitting code, but not the ~200 MB of template SEDs and filter
+curves it fits against — those live in a separate
+[gbrammer/eazy-photoz](https://github.com/gbrammer/eazy-photoz) checkout.
+`SEDStandardiser._ensure_eazy_templates` fetches this automatically (`git
+clone`) into `$EAZYCODE` if set, else `<repo_root>/EAZY` (gitignored), the
+first time `run_eazy_fit` runs — no manual step needed as long as the
+container has network access to GitHub. If `eazy-py` or the template/filter
+data can't be reached, `run_eazy_fit` falls back to a clearly-logged
+synthetic stub fit so the rest of the pipeline stays runnable.
+
 ---
 
 ## Quickstart
@@ -180,13 +193,29 @@ fails — see `pipeline/retriever.py` for the documented fallback behaviour.
 
 ## Results Summary
 
-*Placeholder — to be filled in once Phase 3/4 analysis on real MAST catalogues completes.*
+CEERS DR1.0, fit with a real `eazy-py` photo-z run (`tweak_fsps_QSF_12_v3` templates) — see
+`results/tables/interpretation_summary.tex` and `notebooks/04_interpretation.ipynb`. JADES/COSMOS-Web
+are not yet downloaded (`data_provenance.jades_access_date` is still `null` in
+`config/pipeline_config.yaml`).
 
-| Survey | N sources | Anomaly rate | AGN fraction | Unexplained | z-trend p-value |
+`pipeline.quality.apply_quality_pipeline` excludes sources with `chi2_eazy < 0` (EAZY's own
+fit-failure sentinel — `fit_at_zbest` did not converge) from anomaly scoring entirely, flagging them
+via `qc_eazy_fit_failure` instead of letting their degenerate residuals dominate the ranking. Of
+68,839 preprocessed CEERS sources, 2,900 (4.2%) hit this sentinel; the numbers below describe the
+remaining 65,939-source clean sample that was actually scored.
+
+| Survey | N sources (clean) | Anomaly rate | AGN fraction | Unexplained | z-trend p-value |
 |--------|-----------|-------------|--------------|-------------|----------------|
-| CEERS | — | —% | —% | —% | — |
+| CEERS | 65,939 | 2.0% | 0.24% | 1.8% | 0.32 (not significant) |
 | JADES | — | —% | —% | —% | — |
 | COSMOS-Web | — | —% | —% | —% | — |
+
+Before this filter existed, 94% of the flagged (top 2%) population was fit-failure artifacts rather
+than photometrically well-fit SEDs with an unusual shape — see the data-quality note in
+`notebooks/04_interpretation.ipynb` §1 for the before/after breakdown. The redshift-trend null result
+(no significant $z$-dependence) is stable across both the unfiltered ($p=0.29$) and filtered
+($p=0.32$) real-EAZY runs, though the unfiltered run's per-bin rates were themselves distorted by
+fit-failure clustering at particular redshifts.
 
 ---
 

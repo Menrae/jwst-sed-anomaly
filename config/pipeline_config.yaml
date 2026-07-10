@@ -6,8 +6,8 @@
 pipeline_name: jwst-sed-anomaly
 data_level: a1                        # raw-to-processed output level (tsdat convention)
 version: "0.1.0"
-last_updated: "2026-07-08T05:33:15Z"
-git_commit_hash: "36612503a5ca8c883755e556deefcbbfaa044558"
+last_updated: "2026-07-10T00:03:17Z"
+git_commit_hash: "a8b4c29b019bf095456bbc6b7c473f8bcef9deb9"
 
 # ── Retriever (pipeline/retriever.py → MASTRetriever) ────────────────────────
 retriever:
@@ -16,6 +16,11 @@ retriever:
       url: "https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz"  # actual CEERS_DR1_URL used by fetch_ceers() (the ceers.github.io landing page never contained the catalogue file)
       output_file: "data/raw/ceers_dr1.fits"
       mast_collection: "CEERS"
+      raw_flux_unit: nJy  # CEERS DR1.0 (Cox et al. 2025) <band>_FLUX columns carry no unit
+                           # suffix, so preprocess() would otherwise assume they're already in
+                           # uJy. Verified false: reproducing <band>_MAG from <band>_FLUX via
+                           # AB_mag = -2.5*log10(flux) + zeropoint only round-trips with
+                           # zeropoint=8.90 (nJy), not 23.9 (uJy) -- a factor-of-1000 error.
     - name: jades
       url: "https://archive.stsci.edu/hlsp/jades"
       output_file: "data/raw/jades_dr1.fits"
@@ -40,11 +45,17 @@ retriever:
     - F770W
   data_provenance:
     ceers_download_url: "https://web.corral.tacc.utexas.edu/ceersdata/DR1/Catalog/ceers_cat_v1.0.fits.gz"
-    ceers_access_date: "2026-07-08"           # data/raw/ceers_dr1.fits fetched via fetch_ceers() (commit 50355d8)
+    ceers_access_date: "2026-07-10"           # data/raw/ceers_dr1.fits re-fetched via fetch_ceers() as part of run_full_pipeline
     jades_download_url: null                  # JADES not yet downloaded; MASTRetriever.fetch_jades() not run in this analysis
     jades_access_date: null
     agn_catalogue_download_url: "https://quasars.org/milliquas.fits.zip"
-    agn_catalogue_access_date: "2026-07-08"   # data/raw/milliquas_v8.fits (Milliquas v8 Final Edition, 2023), commit 5c9fa5e
+    agn_catalogue_access_date: "2026-07-08"   # data/raw/milliquas_v8.fits (Milliquas v8 Final Edition, 2023); verified
+                                               # genuine (3C 273 found at its known position) and re-used as-is on
+                                               # 2026-07-10, no re-download needed since the file was unchanged
+    eazy_templates_download_url: "https://github.com/gbrammer/eazy-photoz.git"
+    eazy_templates_access_date: "2026-07-09"  # cloned into EAZY/eazy-photoz (gitignored) by
+                                               # SEDStandardiser._ensure_eazy_templates on first real EAZY fit;
+                                               # eazy-py (PyPI package "eazy") itself is pinned in requirements.txt
 
 # ── Standardiser (pipeline/standardise.py → SEDStandardiser) ─────────────────
 standardiser:
@@ -54,10 +65,12 @@ standardiser:
   flux_unit: uJy                      # target flux unit after normalisation
   sed_fitter: eazy                    # options: eazy | cigale | stub
   eazy:
-    template_set: "tweak_fsps_QSF_12_v3"
+    template_set: "tweak_fsps_QSF_12_v3"  # templates/fsps_full/tweak_fsps_QSF_12_v3.param in gbrammer/eazy-photoz
     z_min: 0.01
     z_max: 12.0
     z_step: 0.01
+    sys_err: 0.02                # fractional systematic flux error floor added in quadrature
+    n_proc: 0                    # 0 = eazy-py auto-selects (cpu_count - 2)
     param_file: null            # zphot.param is generated dynamically per run inside the EAZY output_dir (SEDStandardiser._write_eazy_param); no static file lives at config/zphot.param
   output_filename_convention: "{survey}.a1.{date}.{time}.nc"
 

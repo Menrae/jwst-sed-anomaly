@@ -115,10 +115,13 @@ def test_preprocess_canonicalises_ceers_flux_err_columns(standardiser, err_suffi
 
     result = standardiser.preprocess(df)
 
+    # standardiser is fixtured with survey="ceers", which configures
+    # raw_flux_unit: nJy (see pipeline_config.yaml) -- un-suffixed flux/
+    # flux_err columns are scaled by 1e-3 on the way to uJy.
     for b in BANDS:
         assert f"{b.lower()}_flux_err" in result.columns
         assert f"{b.lower()}_{err_suffix}" not in result.columns
-        assert (result[f"{b.lower()}_flux_err"] == df[f"{b.lower()}_{err_suffix}"]).all()
+        assert np.allclose(result[f"{b.lower()}_flux_err"], df[f"{b.lower()}_{err_suffix}"] * 1e-3)
 
 
 # ── extract_residuals ────────────────────────────────────────────────────
@@ -182,10 +185,21 @@ def test_band_pivot_wavelengths_cover_configured_bands(standardiser):
         assert band in BAND_PIVOT_WAVELENGTH_UM
 
 
-# ── run_eazy_fit (stub fallback, since eazy CLI is not installed) ─────────
+# ── run_eazy_fit ────────────────────────────────────────────────────────
+#
+# `run_eazy_fit` tries a real `eazy-py` fit first and only falls back to
+# the synthetic stub if that raises. The fallback test below forces that
+# path with monkeypatch rather than relying on eazy-py being absent from
+# the test environment (it is installed here, with real gbrammer/
+# eazy-photoz templates -- see `SEDStandardiser._ensure_eazy_templates`).
 
 
-def test_run_eazy_fit_falls_back_to_stub(standardiser, tmp_path):
+def test_run_eazy_fit_falls_back_to_stub_on_fit_failure(standardiser, tmp_path, monkeypatch):
+    def _boom(self, df, ids, output_dir):
+        raise RuntimeError("simulated eazy-py failure")
+
+    monkeypatch.setattr(SEDStandardiser, "_fit_with_eazy_py", _boom)
+
     df = _make_catalogue(n=5, rng=np.random.default_rng(7))
     df["z_phot"] = 2.0
 
@@ -195,6 +209,30 @@ def test_run_eazy_fit_falls_back_to_stub(standardiser, tmp_path):
     assert (result["chi2"] > 0).all()  # lognormal domain
     assert len(result) == len(df)
     assert standardiser._eazy_version == "synthetic-stub"
+    assert standardiser._last_fit_products is None
+
+
+def test_run_eazy_fit_uses_real_eazy_py(standardiser, tmp_path):
+    """End-to-end: a real eazy-py fit against gbrammer/eazy-photoz templates
+    produces (z_a, chi2, template_id) and stashes best-fit template
+    photometry for extract_residuals to use for real per-band residuals."""
+    df = _make_catalogue(n=5, rng=np.random.default_rng(7))
+    df["z_phot"] = 2.0
+
+    result = standardiser.run_eazy_fit(df, tmp_path)
+
+    assert {"z_a", "chi2", "template_id"}.issubset(result.columns)
+    assert len(result) == len(df)
+    assert standardiser._eazy_version.startswith("eazy-py ")
+    assert standardiser._last_fit_products is not None
+    assert standardiser._last_fit_products["n"] == len(df)
+    assert standardiser._last_fit_products["fmodel"].shape == (
+        len(df),
+        len(standardiser._flux_bands_present(df)),
+    )
+
+    ds = standardiser.extract_residuals(df, result)
+    assert ds.attrs["residual_model"] == "eazy_best_fit_template"
 
 
 # ── module-level helper ──────────────────────────────────────────────────

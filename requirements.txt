@@ -12,6 +12,9 @@ seaborn>=0.13
 scikit-learn>=1.4
 umap-learn>=0.5
 eazy>=0.7.0
+# dust_attenuation is an optional eazy-py soft dependency (silences an import
+# warning; eazy-py still works without it). Not on PyPI -- install from
+# source if desired: pip install git+https://github.com/karllark/dust_attenuation.git
 pyyaml>=6.0
 xarray>=2024.3
 netCDF4>=1.6

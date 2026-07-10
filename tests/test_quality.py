@@ -180,8 +180,41 @@ def test_apply_quality_pipeline_appends_qc_variables_and_promotes_data_level():
         "qc_umap_outlier",
         "qc_agn_match",
         "qc_emission_line_flag",
+        "qc_eazy_fit_failure",
     ):
         assert var in result.data_vars, f"missing {var}"
         assert result[var].sizes["source_id"] == 40
 
     assert result.attrs["data_level"] == "b1"
+    # No injected chi2_eazy<0 sentinels in this fixture -- nothing excluded.
+    assert not result["qc_eazy_fit_failure"].values.any()
+    assert np.isfinite(result["qc_anomaly_score"].values).all()
+
+
+def test_apply_quality_pipeline_excludes_eazy_fit_failures_from_scoring():
+    """chi2_eazy < 0 (EAZY's fit-failure sentinel) sources must be flagged via
+    qc_eazy_fit_failure and excluded from anomaly scoring -- not just from the
+    model fit, but from getting *any* score at all (NaN), so they can never
+    dominate a "top outliers" ranking downstream."""
+    ds, outlier_idx = _synthetic_residual_dataset(n=60, seed=5, n_outliers=4)
+
+    failed_idx = np.array([0, 1, 2])
+    ds["chi2_eazy"].values[failed_idx] = -1.0
+
+    result = apply_quality_pipeline(ds, CONFIG_DIR / "quality_config.yaml")
+
+    failure_flag = result["qc_eazy_fit_failure"].values
+    assert failure_flag[failed_idx].all()
+    assert not failure_flag[np.setdiff1d(np.arange(60), failed_idx)].any()
+
+    ensemble_score = result["qc_anomaly_score"].values
+    iso_score = result["qc_iso_forest_score"].values
+    umap_score = result["qc_umap_outlier"].values
+    assert np.isnan(ensemble_score[failed_idx]).all()
+    assert np.isnan(iso_score[failed_idx]).all()
+    assert np.isnan(umap_score[failed_idx]).all()
+
+    non_failed = np.setdiff1d(np.arange(60), failed_idx)
+    assert np.isfinite(ensemble_score[non_failed]).all()
+    assert np.isfinite(iso_score[non_failed]).all()
+    assert np.isfinite(umap_score[non_failed]).all()

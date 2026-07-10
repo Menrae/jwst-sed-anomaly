@@ -311,8 +311,19 @@ def apply_quality_pipeline(ds: xr.Dataset, config_path: Union[str, Path]) -> xr.
     an "a1" Dataset and return the flagged "b1" Dataset.
 
     Appends `qc_anomaly_score`, `qc_iso_forest_score`, `qc_umap_outlier`,
-    `qc_agn_match`, `qc_emission_line_flag`, and promotes `data_level` from
-    "a1" to "b1".
+    `qc_agn_match`, `qc_emission_line_flag`, `qc_eazy_fit_failure`, and
+    promotes `data_level` from "a1" to "b1".
+
+    Sources with `chi2_eazy < 0` (EAZY's own sentinel for "fit_at_zbest did
+    not converge") are excluded from the anomaly-scoring checkers entirely
+    -- a non-converged fit forces degenerate template photometry that
+    produces erratic per-band residuals Isolation Forest reads as maximally
+    anomalous, so leaving them in would let fit-failure artifacts dominate
+    the anomaly ranking and skew the checkers' own score normalisation.
+    They are still retained as rows in the returned Dataset (flagged via
+    `qc_eazy_fit_failure`) for auditability, but their
+    `qc_iso_forest_score`/`qc_umap_outlier`/`qc_anomaly_score` are left NaN
+    ("not scored") rather than assigned a value.
     """
     config_path = Path(config_path)
     with open(config_path) as fh:
@@ -337,6 +348,30 @@ def apply_quality_pipeline(ds: xr.Dataset, config_path: Union[str, Path]) -> xr.
     ds = ds.copy()
     n = ds.sizes["source_id"]
 
+    # ── Pre-scoring filter: exclude EAZY fit failures ───────────────────
+    # chi2_eazy < 0 is eazy-py's own sentinel for "fit_at_zbest could not
+    # identify a valid best-fit redshift" (see
+    # SEDStandardiser._fit_with_eazy_py) -- not a real chi2 value, and not a
+    # signal the anomaly checkers should ever see.
+    if "chi2_eazy" in ds:
+        eazy_fit_failure = ds["chi2_eazy"].values < 0
+    else:
+        eazy_fit_failure = np.zeros(n, dtype=bool)
+    ds["qc_eazy_fit_failure"] = xr.DataArray(eazy_fit_failure, dims=["source_id"])
+
+    scoring_mask = ~eazy_fit_failure
+    n_excluded = int(eazy_fit_failure.sum())
+    if n_excluded:
+        logger.warning(
+            "apply_quality_pipeline: excluding %d/%d sources (%.1f%%) with chi2_eazy < 0 "
+            "(EAZY fit-failure sentinel) from anomaly scoring; flagged via qc_eazy_fit_failure, "
+            "qc_iso_forest_score/qc_umap_outlier/qc_anomaly_score left NaN for these sources.",
+            n_excluded,
+            n,
+            100.0 * n_excluded / n if n else 0.0,
+        )
+    scored_ds = ds.isel(source_id=scoring_mask) if n_excluded else ds
+
     precomputed_checkers: List[AnomalyChecker] = []
     weights: List[float] = []
 
@@ -346,7 +381,8 @@ def apply_quality_pipeline(ds: xr.Dataset, config_path: Union[str, Path]) -> xr.
             n_estimators=iso_cfg.get("n_estimators", 200),
             random_state=iso_cfg.get("random_state", 42),
         )
-        iso_score = iso_checker.score(ds)
+        iso_score = np.full(n, np.nan)
+        iso_score[scoring_mask] = iso_checker.score(scored_ds)
         precomputed_checkers.append(_PrecomputedScore(iso_score))
         weights.append(1.0)
     else:
@@ -362,9 +398,19 @@ def apply_quality_pipeline(ds: xr.Dataset, config_path: Union[str, Path]) -> xr.
             min_samples=dbscan_cfg.get("min_samples", 5),
             random_state=umap_cfg.get("random_state", 42),
         )
-        umap_score = umap_checker.score(ds)
+        umap_score = np.full(n, np.nan)
+        umap_score[scoring_mask] = umap_checker.score(scored_ds)
         precomputed_checkers.append(_PrecomputedScore(umap_score))
         weights.append(1.0)
+        # UMAPDBSCANChecker.score() stashed the embedding on scored_ds.attrs,
+        # sized to the scored subset; scatter it back to full length (NaN for
+        # excluded sources) so ds.attrs stays indexable by the full source_id.
+        emb_x = np.full(n, np.nan)
+        emb_y = np.full(n, np.nan)
+        emb_x[scoring_mask] = scored_ds.attrs["umap_embedding_x"]
+        emb_y[scoring_mask] = scored_ds.attrs["umap_embedding_y"]
+        ds.attrs["umap_embedding_x"] = emb_x.tolist()
+        ds.attrs["umap_embedding_y"] = emb_y.tolist()
     else:
         umap_score = np.full(n, np.nan)
     ds["qc_umap_outlier"] = xr.DataArray(umap_score, dims=["source_id"])

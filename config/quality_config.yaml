@@ -3,6 +3,9 @@
 # target, threshold, and handler action.
 # ─────────────────────────────────────────────────────────────────────────────
 
+last_updated: "2026-07-10T00:03:17Z"
+git_commit_hash: "a8b4c29b019bf095456bbc6b7c473f8bcef9deb9"
+
 checkers:
 
   - name: sed_residual_range
@@ -46,6 +49,21 @@ checkers:
     handler: drop_source
     qc_variable: qc_redshift_out_of_range
 
+  - name: eazy_fit_failure
+    description: >
+      Exclude sources where EAZY's fit_at_zbest could not identify a valid
+      best-fit redshift (chi2_eazy < 0, eazy-py's own failure sentinel) from
+      the anomaly-scoring checkers (Isolation Forest, UMAP+DBSCAN). A
+      non-converged fit forces degenerate template photometry that produces
+      erratic per-band residuals the checkers read as maximally anomalous --
+      verified against the real CEERS catalogue, where this dominated the
+      top-2% flagged population (~94%) with fit-failure artifacts rather
+      than genuine SED anomalies.
+    variable: chi2_eazy
+    threshold: 0.0                # chi2_eazy < 0 sentinel
+    handler: exclude_from_scoring
+    qc_variable: qc_eazy_fit_failure
+
 handlers:
   flag_and_log:
     description: >
@@ -55,3 +73,11 @@ handlers:
     description: >
       Remove the source entirely from the dataset and log the count of
       dropped sources at the end of the QC stage.
+  exclude_from_scoring:
+    description: >
+      Set the qc_ variable to True for failing sources and exclude them from
+      the anomaly-scoring checkers entirely -- unlike flag_and_log, these
+      sources do not influence the fitted models or score normalisation.
+      Sources are retained in the dataset with qc_iso_forest_score/
+      qc_umap_outlier/qc_anomaly_score left NaN (not scored), rather than
+      assigned a value alongside everyone else.

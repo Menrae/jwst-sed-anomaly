@@ -198,7 +198,9 @@ class DiagnosticPlotter:
         ra = ds["ra"].values
         dec = ds["dec"].values
         score = ds[ENSEMBLE_SCORE_VAR].values
-        threshold = np.quantile(score, 1 - top_fraction)
+        # NaN-safe: sources excluded from scoring (e.g. qc_eazy_fit_failure)
+        # carry a NaN score and must not skew the quantile or be counted "top".
+        threshold = np.nanquantile(score, 1 - top_fraction)
         is_top = score >= threshold
 
         fig, ax = plt.subplots(figsize=(7, 6))
@@ -337,7 +339,11 @@ def run_full_pipeline(config_path: Union[str, Path], survey: Optional[str] = Non
     ensemble_score = b1_ds[ENSEMBLE_SCORE_VAR].values
     n_flagged = int((ensemble_score > 0.8).sum())
     top_n = min(20, b1_ds.sizes["source_id"])
-    top_order = np.argsort(ensemble_score)[::-1][:top_n]
+    # NaN-safe descending order: sources excluded from scoring (e.g.
+    # qc_eazy_fit_failure) carry a NaN score and must sort last, not first
+    # -- plain np.argsort(...)[::-1] would put every NaN at the very front.
+    score_for_ranking = np.where(np.isnan(ensemble_score), -np.inf, ensemble_score)
+    top_order = np.argsort(score_for_ranking)[::-1][:top_n]
     top_outlier_ids = b1_ds["source_id"].values[top_order].tolist()
 
     # ── Stage 4: Output ──────────────────────────────────────────────────

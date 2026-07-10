@@ -16,12 +16,21 @@ Concretely, `SEDStandardiser` takes the DataFrame produced by
 1. `preprocess`      — filters to the science redshift window and minimum
                         photometric coverage, and normalises flux units.
 2. `run_eazy_fit`     — obtains a best-fit photo-z / template / chi2 per
-                        source (via the real EAZY CLI if installed, else a
-                        clearly-logged synthetic stub for pipeline
-                        development).
-3. `extract_residuals`— computes per-band SED residuals against a smooth
-                        continuum model and packages everything into an
-                        xarray Dataset with tsdat-style global attributes.
+                        source by fitting with the real `eazy-py` Python API
+                        (github.com/gbrammer/eazy-py) against the
+                        gbrammer/eazy-photoz template and filter set, falling
+                        back to a clearly-logged synthetic stub only if the
+                        real fit cannot run (e.g. no network access to fetch
+                        the template/filter data on first use).
+3. `extract_residuals`— computes per-band SED residuals against EAZY's own
+                        best-fit template photometry (`PhotoZ.fmodel`) when a
+                        real fit was just run, packaging everything into an
+                        xarray Dataset with tsdat-style global attributes. If
+                        no real fit products are available (e.g. calling this
+                        method standalone, as the unit tests do) it falls
+                        back to a smooth log-log power-law continuum fit
+                        through each source's own photometry as a stand-in
+                        model.
 4. `save`             — writes that Dataset to NetCDF using tsdat's
                         `{survey}.{level}.{date}.{time}.nc` naming convention.
 
@@ -31,8 +40,8 @@ Populated by: Claude Code Prompt 2.2
 from __future__ import annotations
 
 import logging
+import os
 import re
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Union
@@ -66,12 +75,30 @@ BAND_PIVOT_WAVELENGTH_UM = {
 }
 
 #: Flux unit conversion factors to the pipeline's target unit (uJy),
-#: keyed by the unit suffix a column name may carry (e.g. "f090w_flux_njy").
+#: keyed by the unit suffix a column name may carry (e.g. "f090w_flux_njy"),
+#: or by a survey's configured `raw_flux_unit` (see `_convert_fluxes_to_ujy`).
 _UNIT_CONVERSION_TO_UJY = {
     "njy": 1e-3,
     "ujy": 1.0,
     "mjy": 1e3,
     "jy": 1e6,
+}
+
+#: EAZY FILTER.RES.latest filter index for each JWST band this pipeline
+#: works with, taken from gbrammer/eazy-photoz's
+#: filters/FILTER.RES.latest.info (jwst_nircam_* / jwst_miri_* entries).
+#: Used to build the `zphot.translate` file `eazy-py` needs to map this
+#: pipeline's `<band>_flux(_err)` columns onto EAZY's filter curves.
+EAZY_FILTER_INDEX = {
+    "F090W": 363,
+    "F115W": 364,
+    "F150W": 365,
+    "F200W": 366,
+    "F277W": 375,
+    "F356W": 376,
+    "F410M": 383,
+    "F444W": 377,
+    "F770W": 396,
 }
 
 #: Fallback per-band flux-uncertainty column suffixes, checked in priority
@@ -125,6 +152,12 @@ class SEDStandardiser:
         surveys = retriever_cfg.get("surveys") or []
         self.survey = survey or (surveys[0].get("name", "unknown") if surveys else "unknown")
 
+        # Per-survey raw flux unit override (e.g. CEERS DR1.0's <band>_FLUX
+        # columns carry no unit suffix but are actually nJy, not uJy -- see
+        # `raw_flux_unit` in pipeline_config.yaml and `_convert_fluxes_to_ujy`).
+        survey_cfg = next((s for s in surveys if s.get("name") == self.survey), {})
+        self._raw_flux_unit: Optional[str] = survey_cfg.get("raw_flux_unit")
+
         self.band_list: List[str] = retriever_cfg.get("band_prefixes") or list(BAND_PREFIXES)
         self.redshift_range = tuple(standardiser_cfg.get("redshift_range", [0.5, 10.0]))
         self.min_photometric_bands: int = standardiser_cfg.get("min_photometric_bands", 4)
@@ -136,6 +169,13 @@ class SEDStandardiser:
         )
 
         self._eazy_version = "unknown"
+        #: Best-fit template photometry from the most recent real
+        #: `run_eazy_fit` call (dict of `n`/`bands`/`fnu`/`efnu`/`fmodel`/
+        #: `ok_data`), consumed by `extract_residuals` to compute real
+        #: per-band residuals. `None` when no real fit has been run yet (or
+        #: it fell back to the synthetic stub), in which case
+        #: `extract_residuals` falls back to its power-law stand-in model.
+        self._last_fit_products: Optional[dict] = None
 
     # ── preprocess ───────────────────────────────────────────────────────
 
@@ -235,13 +275,17 @@ class SEDStandardiser:
     def _convert_fluxes_to_ujy(self, df: pd.DataFrame, bands: List[str]) -> pd.DataFrame:
         """Normalise flux/flux_err columns to the target unit (uJy).
 
-        Columns already named `<band>_flux(_err)` (no unit suffix) are
-        assumed to already be in the target unit, matching the convention
-        used by `MASTRetriever.load_catalogue`. Columns carrying an explicit
-        unit suffix (e.g. `<band>_flux_njy`) are converted and renamed to
-        drop the suffix.
+        Columns carrying an explicit unit suffix (e.g. `<band>_flux_njy`)
+        are converted and renamed to drop the suffix. Columns already named
+        `<band>_flux(_err)` (no unit suffix) are converted using this
+        survey's configured `raw_flux_unit` (`self._raw_flux_unit`) if set
+        (e.g. CEERS DR1.0's un-suffixed columns are actually nJy -- see
+        `raw_flux_unit` in pipeline_config.yaml); otherwise they are assumed
+        to already be in the target unit, matching the convention used by
+        `MASTRetriever.load_catalogue`.
         """
         df = df.copy()
+        raw_factor = _UNIT_CONVERSION_TO_UJY.get((self._raw_flux_unit or "").lower())
         converted, assumed = [], []
         for band in bands:
             for kind in ("flux", "flux_err"):
@@ -255,6 +299,9 @@ class SEDStandardiser:
                         break
                 if matched_suffix:
                     converted.append(f"{base} (from {matched_suffix})")
+                elif base in df.columns and raw_factor is not None:
+                    df[base] = df[base] * raw_factor
+                    converted.append(f"{base} (from configured raw_flux_unit={self._raw_flux_unit})")
                 elif base in df.columns:
                     assumed.append(base)
 
@@ -274,47 +321,184 @@ class SEDStandardiser:
         """Fit photometric redshifts with EAZY and return best-fit params
         (`z_a`, `chi2`, `template_id`) merged with the input DataFrame.
 
-        Writes EAZY's `zphot.cat` and `zphot.param` input files, then runs
-        the `eazy` CLI as a subprocess. If EAZY is not installed (or the
-        run fails), falls back to a synthetic stub — clearly logged — so
-        the rest of the pipeline remains runnable during development.
+        Writes EAZY's `zphot.cat`/`zphot.translate`/`zphot.param` input
+        files, then fits with the real `eazy-py` Python API
+        (`eazy.photoz.PhotoZ`) against the gbrammer/eazy-photoz template and
+        filter set (fetched on first use if not already present locally —
+        see `_ensure_eazy_templates`). Also stashes the fit's best-fit
+        template photometry in `self._last_fit_products` so a subsequent
+        `extract_residuals` call computes real per-band residuals against
+        it. If the real fit cannot run for any reason (`eazy-py` not
+        importable, template/filter data unreachable, a fit error), falls
+        back to a synthetic stub — clearly logged — so the rest of the
+        pipeline remains runnable during development.
         """
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         df = df.reset_index(drop=True)
         ids = np.arange(1, len(df) + 1)
-        cat_path = self._write_eazy_catalog(df, ids, output_dir)
-        param_path = self._write_eazy_param(output_dir, cat_path)
 
         try:
-            subprocess.run(
-                ["eazy", "-p", str(param_path)],
-                cwd=output_dir,
-                check=True,
-                capture_output=True,
-                timeout=600,
+            fit_df, version = self._fit_with_eazy_py(df, ids, output_dir)
+            self._eazy_version = version
+            logger.info(
+                "EAZY fit completed for %d sources -> %s (%s)", len(df), output_dir, version
             )
-            self._try_read_pz_file(output_dir)
-            fit_df = self._read_eazy_outputs(output_dir)
-            self._eazy_version = self._detect_eazy_version()
-            logger.info("EAZY fit completed for %d sources -> %s", len(df), output_dir)
-        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except Exception as exc:  # noqa: BLE001 - any failure triggers documented fallback
             logger.warning(
-                "EAZY executable not available or the fit failed (%s: %s). Falling back to a "
-                "SYNTHETIC STUB fit (lognormal chi2, jittered z_a, random template_id) so the "
-                "pipeline remains runnable during development — these values are NOT suitable "
-                "for science and must not be used to draw astrophysical conclusions.",
+                "Real EAZY fit failed (%s: %s). Falling back to a SYNTHETIC STUB fit "
+                "(lognormal chi2, jittered z_a, random template_id) so the pipeline remains "
+                "runnable during development — these values are NOT suitable for science and "
+                "must not be used to draw astrophysical conclusions.",
                 type(exc).__name__,
                 exc,
+                exc_info=True,
             )
             fit_df = self._stub_eazy_fit(df, ids)
             self._eazy_version = "synthetic-stub"
+            self._last_fit_products = None
 
         merged = df.copy()
         merged["id"] = ids
         merged = merged.merge(fit_df[["id", "z_a", "chi2", "template_id"]], on="id", how="left")
         return merged
+
+    def _ensure_eazy_templates(self) -> Path:
+        """Locate the gbrammer/eazy-photoz template & filter data `eazy-py`
+        needs but does not ship on PyPI, fetching it via `git clone` on
+        first use if necessary.
+
+        Honours an existing `$EAZYCODE` if the caller has already set one
+        (e.g. to share a cache across runs); otherwise defaults to
+        `<repo_root>/EAZY`, which `.gitignore` already excludes.
+
+        Returns
+        -------
+        Path
+            The `eazy-photoz` checkout directory (contains `templates/` and
+            `filters/`).
+        """
+        import eazy
+        import eazy.utils as ezutils
+
+        base = os.environ.get("EAZYCODE")
+        if not base:
+            base = str(Path(__file__).resolve().parent.parent / "EAZY")
+            os.environ["EAZYCODE"] = base
+        eazy.set_data_path(path=base)
+
+        photoz_dir = Path(base) if Path(base).name == "eazy-photoz" else Path(base) / "eazy-photoz"
+        if not (photoz_dir / "templates").exists():
+            logger.info(
+                "EAZY templates/filters not found at %s; fetching gbrammer/eazy-photoz "
+                "from GitHub...",
+                photoz_dir,
+            )
+            eazy.fetch_eazy_photoz()
+        if not (photoz_dir / "templates").exists():
+            raise RuntimeError(
+                f"EAZY templates/filters still missing at {photoz_dir} after fetch attempt"
+            )
+
+        # `eazy.set_data_path()` only reassigns the `eazy` package's own
+        # DATA_PATH global. Every module that actually resolves template/
+        # filter/prior file paths (filters.py, templates.py, photoz.py,
+        # param.py, sps.py) does so via `utils.DATA_PATH`, and `eazy/utils.py`
+        # bound that name with `from . import DATA_PATH` at import time --
+        # a static binding that a later `eazy.DATA_PATH = ...` does not
+        # propagate to. Set it directly, or every relative template
+        # component path (e.g. `tweak_fsps_QSF_12_v3_001.dat`) resolves
+        # against the (missing) site-packages copy instead of this checkout.
+        ezutils.DATA_PATH = str(photoz_dir)
+        eazy.DATA_PATH = str(photoz_dir)
+
+        return photoz_dir
+
+    def _fit_with_eazy_py(
+        self, df: pd.DataFrame, ids: np.ndarray, output_dir: Path
+    ) -> tuple[pd.DataFrame, str]:
+        """Fit real photometric redshifts using the `eazy-py` Python API.
+
+        Returns the best-fit `(id, z_a, chi2, template_id)` DataFrame and an
+        `eazy-py` version string. As a side effect, stores per-band
+        best-fit template photometry in `self._last_fit_products` for
+        `extract_residuals` to consume.
+        """
+        import eazy
+        import eazy.photoz as ezphot
+
+        photoz_dir = self._ensure_eazy_templates()
+
+        bands = self._flux_bands_present(df)
+        if not bands:
+            raise ValueError("No recognised photometric flux columns present for EAZY fit")
+
+        cat_path = self._write_eazy_catalog(df, ids, output_dir)
+        translate_path = self._write_eazy_translate(output_dir, bands)
+
+        template_set = self.eazy_config.get("template_set", "tweak_fsps_QSF_12_v3")
+        params = {
+            "CATALOG_FILE": str(cat_path),
+            "CATALOG_FORMAT": "ascii.commented_header",
+            "MAIN_OUTPUT_FILE": "photz",
+            "OUTPUT_DIRECTORY": str(output_dir),
+            "MW_EBV": 0.0,
+            "Z_MIN": self.eazy_config.get("z_min", 0.01),
+            "Z_MAX": self.eazy_config.get("z_max", 12.0),
+            "Z_STEP": self.eazy_config.get("z_step", 0.01),
+            "SYS_ERR": self.eazy_config.get("sys_err", 0.02),
+            # preprocess() normalises catalogue fluxes to uJy; 23.9 is the
+            # AB zeropoint for uJy, needed so EAZY's apparent-magnitude
+            # prior is evaluated against the right flux scale.
+            "PRIOR_ABZP": 23.9,
+            "PRIOR_FILTER": 205,  # standard eazy-py F160W apparent-mag prior filter
+            "PRIOR_FILE": str(photoz_dir / "templates" / "prior_F160W_TAO.dat"),
+            "FILTERS_RES": str(photoz_dir / "filters" / "FILTER.RES.latest"),
+            "TEMPLATES_FILE": str(photoz_dir / "templates" / "fsps_full" / f"{template_set}.param"),
+            "TEMP_ERR_FILE": str(photoz_dir / "templates" / "uvista_nmf" / "template_error_10.def"),
+            "WAVELENGTH_FILE": str(photoz_dir / "templates" / "uvista_nmf" / "lambda.def"),
+        }
+
+        ez = ezphot.PhotoZ(
+            param_file=None,
+            translate_file=str(translate_path),
+            zeropoint_file=None,
+            params=params,
+            load_prior=True,
+            load_products=False,
+        )
+        ez.param.write(str(output_dir / "zphot.param"))
+
+        n_proc = self.eazy_config.get("n_proc", 0)
+        ez.fit_catalog(n_proc=n_proc)
+        ez.fit_at_zbest(n_proc=n_proc)
+
+        # EAZY fits a non-negative linear combination of all templates
+        # simultaneously (TEMPLATE_COMBOS='a'), so there's no single native
+        # "template_id" the way the old eazy C-code .zout format had one;
+        # take the most-heavily-weighted template in that combination as
+        # the closest analogue.
+        template_id = np.argmax(ez.coeffs_best, axis=1) + 1
+
+        fit_df = pd.DataFrame(
+            {
+                "id": ids,
+                "z_a": np.asarray(ez.zbest),
+                "chi2": np.asarray(ez.chi2_best),
+                "template_id": template_id,
+            }
+        )
+
+        self._last_fit_products = {
+            "n": len(df),
+            "bands": bands,
+            "fnu": np.asarray(ez.fnu),
+            "efnu": np.asarray(ez.efnu),
+            "fmodel": np.asarray(ez.fmodel),
+            "ok_data": np.asarray(ez.ok_data),
+        }
+        return fit_df, f"eazy-py {eazy.__version__}"
 
     def _write_eazy_catalog(self, df: pd.DataFrame, ids: np.ndarray, output_dir: Path) -> Path:
         """Write EAZY's whitespace-delimited `zphot.cat` photometry catalogue."""
@@ -339,78 +523,21 @@ class SEDStandardiser:
         cat_path.write_text("\n".join(lines) + "\n")
         return cat_path
 
-    def _write_eazy_param(self, output_dir: Path, cat_path: Path) -> Path:
-        """Write EAZY's `zphot.param` configuration file from `self.eazy_config`."""
-        param_path = output_dir / "zphot.param"
-        params = {
-            "CATALOG_FILE": str(cat_path),
-            "MAIN_OUTPUT_FILE": "photz",
-            "OUTPUT_DIRECTORY": str(output_dir),
-            "TEMPLATES_FILE": self.eazy_config.get("template_set", "tweak_fsps_QSF_12_v3"),
-            "Z_MIN": self.eazy_config.get("z_min", 0.01),
-            "Z_MAX": self.eazy_config.get("z_max", 12.0),
-            "Z_STEP": self.eazy_config.get("z_step", 0.01),
-        }
-        param_path.write_text("\n".join(f"{k}  {v}" for k, v in params.items()) + "\n")
-        return param_path
-
-    def _read_eazy_outputs(self, output_dir: Path) -> pd.DataFrame:
-        """Best-effort parser for EAZY's ASCII `.zout` best-fit output file.
-
-        EAZY's exact `.zout` column layout has varied across versions/forks
-        (the original `eazy` C binary vs. `eazy-py`); this reads whatever
-        header EAZY wrote and falls back to the standard `photz` column
-        names it has historically used.
-        """
-        zout_path = output_dir / "photz.zout"
-        if not zout_path.exists():
-            raise FileNotFoundError(f"Expected EAZY output not found: {zout_path}")
-
-        header_line = None
-        with open(zout_path) as fh:
-            for line in fh:
-                if line.startswith("#"):
-                    header_line = line.lstrip("#").split()
-                else:
-                    break
-
-        columns = header_line if header_line else ["id", "z_spec", "z_a", "chi2a"]
-        zout = pd.read_csv(zout_path, comment="#", sep=r"\s+", header=None, names=columns)
-
-        if "chi2" not in zout.columns and "chi2a" in zout.columns:
-            zout["chi2"] = zout["chi2a"]
-        if "template_id" not in zout.columns:
-            # Standard EAZY ASCII .zout does not report a per-source best
-            # template index; a full implementation would read it from the
-            # binary .tempfilt/.pz products via eazy-py.
-            zout["template_id"] = -1
-
-        return zout[["id", "z_a", "chi2", "template_id"]]
-
-    def _try_read_pz_file(self, output_dir: Path) -> None:
-        """Log whether EAZY's `.pz` p(z) grid file was produced.
-
-        Full binary parsing of the p(z) grid is out of scope for this
-        scaffold (use `eazy-py`'s readers for that); this only confirms
-        the file exists so the fit is auditable.
-        """
-        pz_path = output_dir / "photz.pz"
-        if pz_path.exists():
-            logger.info(
-                "EAZY p(z) grid file found at %s (not parsed further in this scaffold).", pz_path
-            )
-        else:
-            logger.debug("No EAZY .pz file found at %s", pz_path)
-
     @staticmethod
-    def _detect_eazy_version() -> str:
-        try:
-            result = subprocess.run(
-                ["eazy", "--version"], capture_output=True, text=True, timeout=10
-            )
-            return result.stdout.strip() or result.stderr.strip() or "unknown"
-        except Exception:  # noqa: BLE001
-            return "unknown"
+    def _write_eazy_translate(output_dir: Path, bands: List[str]) -> Path:
+        """Write EAZY's `zphot.translate` file mapping this pipeline's
+        `f_<band>`/`e_<band>` catalogue columns onto EAZY filter numbers
+        (`EAZY_FILTER_INDEX`)."""
+        translate_path = output_dir / "zphot.translate"
+        lines = []
+        for band in bands:
+            idx = EAZY_FILTER_INDEX.get(band)
+            if idx is None:
+                raise ValueError(f"No EAZY_FILTER_INDEX entry configured for band {band!r}")
+            lines.append(f"f_{band} F{idx}")
+            lines.append(f"e_{band} E{idx}")
+        translate_path.write_text("\n".join(lines) + "\n")
+        return translate_path
 
     def _stub_eazy_fit(self, df: pd.DataFrame, ids: np.ndarray) -> pd.DataFrame:
         """Synthetic stand-in for a real EAZY fit, used when EAZY is unavailable.
@@ -446,11 +573,16 @@ class SEDStandardiser:
         `df` and `fit_df` must be row-aligned (e.g. `fit_df` is the output
         of `run_eazy_fit(df, ...)`, which preserves row order).
 
-        Each source's "model" flux is a smooth log-log power-law fit through
-        its own observed photometry — a stand-in for the true EAZY best-fit
-        template SED, which a full implementation would read directly from
-        EAZY's output products. Residuals are `(obs_flux - model_flux) /
-        obs_flux_err`.
+        If `df`/`fit_df` are the same catalogue a real `run_eazy_fit` call
+        just fit (checked via `self._last_fit_products`), each source's
+        "model" flux is EAZY's own best-fit template photometry at that
+        source's best-fit redshift (`PhotoZ.fmodel`) — the real EAZY output.
+        Otherwise (e.g. this method is called standalone, as the unit tests
+        do, or the most recent fit fell back to the synthetic stub) each
+        source's model flux is instead a smooth log-log power-law fit
+        through its own observed photometry, as a stand-in for the true
+        EAZY template SED. Residuals are `(obs_flux - model_flux) /
+        obs_flux_err` either way.
         """
         if len(df) != len(fit_df):
             raise ValueError(
@@ -465,36 +597,49 @@ class SEDStandardiser:
         if not bands:
             raise ValueError("extract_residuals: no recognised photometric flux columns in df")
 
-        residuals = np.full((n, len(bands)), np.nan)
-        for i in range(n):
-            # Per-source loop: each source can have a different subset of
-            # valid bands, so the continuum fit is genuinely per-row rather
-            # than a single vectorisable operation across the catalogue.
-            wavelengths, fluxes, errs, band_idx = [], [], [], []
-            for j, band in enumerate(bands):
-                flux = df.at[i, f"{band.lower()}_flux"]
-                err_col = f"{band.lower()}_flux_err"
-                err = df.at[i, err_col] if err_col in df.columns else np.nan
-                if pd.notna(flux) and flux > 0 and pd.notna(err) and err > 0:
-                    wavelengths.append(BAND_PIVOT_WAVELENGTH_UM[band])
-                    fluxes.append(flux)
-                    errs.append(err)
-                    band_idx.append(j)
+        real = self._last_fit_products
+        use_real = real is not None and real.get("n") == n and real.get("bands") == bands
 
-            if len(fluxes) >= 2:
-                log_w = np.log10(wavelengths)
-                log_f = np.log10(fluxes)
-                slope, intercept = np.polyfit(log_w, log_f, 1)
-                model_flux = 10 ** (intercept + slope * log_w)
-            elif len(fluxes) == 1:
-                # A single valid band carries no shape information to
-                # compare against; treat it as its own model (zero residual).
-                model_flux = np.array(fluxes)
-            else:
-                continue
+        if use_real:
+            with np.errstate(invalid="ignore", divide="ignore"):
+                raw_residuals = (real["fnu"] - real["fmodel"]) / real["efnu"]
+            residuals = np.where(real["ok_data"], raw_residuals, np.nan)
+            logger.info(
+                "extract_residuals: using real EAZY best-fit template photometry for %d sources",
+                n,
+            )
+        else:
+            residuals = np.full((n, len(bands)), np.nan)
+            for i in range(n):
+                # Per-source loop: each source can have a different subset
+                # of valid bands, so the continuum fit is genuinely per-row
+                # rather than a single vectorisable operation across the
+                # catalogue.
+                wavelengths, fluxes, errs, band_idx = [], [], [], []
+                for j, band in enumerate(bands):
+                    flux = df.at[i, f"{band.lower()}_flux"]
+                    err_col = f"{band.lower()}_flux_err"
+                    err = df.at[i, err_col] if err_col in df.columns else np.nan
+                    if pd.notna(flux) and flux > 0 and pd.notna(err) and err > 0:
+                        wavelengths.append(BAND_PIVOT_WAVELENGTH_UM[band])
+                        fluxes.append(flux)
+                        errs.append(err)
+                        band_idx.append(j)
 
-            for k, j in enumerate(band_idx):
-                residuals[i, j] = (fluxes[k] - model_flux[k]) / errs[k]
+                if len(fluxes) >= 2:
+                    log_w = np.log10(wavelengths)
+                    log_f = np.log10(fluxes)
+                    slope, intercept = np.polyfit(log_w, log_f, 1)
+                    model_flux = 10 ** (intercept + slope * log_w)
+                elif len(fluxes) == 1:
+                    # A single valid band carries no shape information to
+                    # compare against; treat it as its own model (zero residual).
+                    model_flux = np.array(fluxes)
+                else:
+                    continue
+
+                for k, j in enumerate(band_idx):
+                    residuals[i, j] = (fluxes[k] - model_flux[k]) / errs[k]
 
         chi2 = fit_df["chi2"].to_numpy() if "chi2" in fit_df.columns else np.full(n, np.nan)
         z_a = fit_df["z_a"].to_numpy() if "z_a" in fit_df.columns else np.full(n, np.nan)
@@ -531,6 +676,7 @@ class SEDStandardiser:
                 "eazy_version": self._eazy_version,
                 "n_sources": n,
                 "n_bands": len(bands),
+                "residual_model": "eazy_best_fit_template" if use_real else "powerlaw_stub",
             },
         )
 
