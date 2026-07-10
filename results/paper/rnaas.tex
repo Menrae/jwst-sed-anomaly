@@ -30,37 +30,36 @@ CEERS Data Release 1.0 catalog \citep{Cox2025}.
 
 Of 87,345 CEERS DR1.0 sources ingested, redshift-window
 ($0.5 \le z_{\rm phot} \le 10$) and coverage cuts retain 68,839 for EAZY
-fitting. EAZY's fit-failure sentinel ($\chi^2_{\rm EAZY}<0$) flags 2,900 of
-these (4.2\%), excluded from scoring since a non-converged fit yields large
-artifact residuals, not genuine outliers. The remaining clean sample of
-65,939 sources is scored, and the top 2\% (1,319 sources) are flagged as
-anomalous. Cross-matching against Milliquas v8 \citep{Flesch2023} within
-1\farcs5 finds only 5 matches (0.38\%): known AGN explain a negligible
-fraction of the flagged population.
+fitting; its fit-failure sentinel ($\chi^2_{\rm EAZY}<0$) excludes 2,900
+(4.2\%) as non-converged artifacts, leaving a clean sample of 65,939
+sources, of which the top 2\% (1,319) are flagged as anomalous.
+Cross-matching against Milliquas v8 \citep{Flesch2023} within 1\farcs5 finds
+only 5 matches (0.38\%): known AGN explain a negligible fraction of the
+flagged population.
 
 Figure~\ref{fig:zrate} bins the flagged rate in $\Delta z=0.5$ shells; an
 OLS fit finds no significant redshift trend ($p=0.32$). Following the
 conservative Bayesian framework of \citet{Wright2014} and
-\citet{LingamLoeb2019} for galactic-scale technosignature/biosignature
-limits, we adopt a prior $P(H_1)=10^{-8}$ per source and the observed
-unexplained fraction of the flagged sample as
-$P(\mathrm{unexplained}\mid H_0)$; the posterior that an unexplained
-flagged source reflects non-standard physics is
-$P(H_1\mid\mathrm{unexplained})\approx1.12\times10^{-8}$, almost unchanged
-from the prior, since being unexplained is the norm here, not the
-exception --- itself a reproducible upper limit on non-standard
-astrophysical processes at current CEERS survey depth.
+\citet{LingamLoeb2019}, we adopt a prior $P(H_1)=10^{-8}$ per source and the
+flagged sample's unexplained fraction as $P(\mathrm{unexplained}\mid H_0)$;
+the posterior that an unexplained flagged source reflects non-standard
+physics is $P(H_1\mid\mathrm{unexplained})\approx1.12\times10^{-8}$, almost
+unchanged from the prior, since being unexplained is the norm here --- a
+reproducible upper limit on non-standard astrophysics at current CEERS
+depth.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.2\linewidth]{../figures/anomaly_rate_vs_redshift.pdf}
-\caption{Flagged rate vs.\ $z$, clean sample ($N=65{,}939$); $p=0.32$.}
+\includegraphics[width=0.15\linewidth]{../figures/anomaly_rate_vs_redshift.pdf}
+\caption{Flagged rate vs.\ $z$, clean sample ($N=65{,}939$), Poisson error
+bars; rates span $\sim$0--11\%; $p=0.32$.}
 \label{fig:zrate}
 \end{figure}
 
 Code: \url{https://github.com/Menrae/jwst-sed-anomaly}. \software{astropy,
 eazy-py \citep{Brammer2008}, scikit-learn, umap-learn, xarray}
 
+\vspace{-1.1\baselineskip}
 \bibliographystyle{aasjournal}
 \bibliography{references}
 

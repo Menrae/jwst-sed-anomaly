@@ -268,6 +268,41 @@ An OLS fit to the binned rate finds no significant redshift trend
 \label{fig:zrate}
 \end{figure}
 
+\subsection{Stellar Mass--SFR Plane}
+\label{sec:results-massfr}
+
+CEERS DR1.0 provides a LePHARE best-fit $\log_{10}(M_\star/M_\odot)$ and
+$\log_{10}(\mathrm{SFR}/M_\odot\,\mathrm{yr}^{-1})$ for each source; 64,195
+of the 65,939 clean-sample sources (97.4\%) have physically valid fits for
+both quantities, the remainder carrying LePHARE's own non-detection
+sentinel values. Figure~\ref{fig:masssfr} places the top-2\% flagged
+anomalies (1,296 of these 64,195 sources; the other 23 flagged sources lack
+a valid mass/SFR fit) on the stellar-mass--SFR plane, together with a
+running-median star-forming main-sequence trace. Anomalous sources are
+sharply concentrated above and along the upper envelope of the main
+sequence rather than tracking its bulk: a Mann-Whitney $U$ test comparing
+ensemble score for sources $>0.3$~dex above versus at/below the running
+median finds $p < 10^{-300}$, i.e., indistinguishable from zero at double
+floating-point precision. This is a far stronger association than the
+absence of any redshift trend in Section~\ref{sec:results-redshift}, and is
+consistent with elevated specific star-formation rate driving genuinely
+larger photometric residuals against EAZY's best-fit template (rather than
+signaling a population of exotic outliers); we return to this reading in
+Section~\ref{sec:discussion}.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{../figures/mass_sfr_anomalies.pdf}
+\caption{Top-2\% flagged anomalies (crimson circles, $N=1{,}296$) on the
+stellar-mass--SFR plane, against a hexbin density map of the full
+64,195-source clean subsample with valid LePHARE mass/SFR fits. The dashed
+line is a running-median main-sequence trace (0.5~dex mass bins, $\geq 10$
+sources/bin). Anomalies preferentially sit above this trace (Mann-Whitney
+$U$ test on ensemble score, above vs.\ at/below the main sequence,
+$p < 10^{-300}$).}
+\label{fig:masssfr}
+\end{figure}
+
 \subsection{Unexplained Outliers}
 \label{sec:results-unexplained}
 
@@ -283,6 +318,19 @@ photometric outliers rather than genuinely unusual, well-fit SEDs. We
 discuss this interpretation further in Section~\ref{sec:discussion}.
 
 \input{../tables/top_outliers.tex}
+
+\subsection{Summary Statistics}
+\label{sec:results-summary}
+
+Table~\ref{tab:interpretation_summary} collects the headline statistics
+from this section in one place: the clean-sample size, the anomaly rate
+(2.0\% by construction of the top-2\% ensemble-score threshold,
+Section~\ref{sec:results-rate}), the AGN and emission-line contaminant
+fractions among the full clean sample, the fraction of the full clean
+sample that is both flagged and unexplained, and the redshift-trend
+$p$-value from Section~\ref{sec:results-redshift}.
+
+\input{../tables/interpretation_summary.tex}
 
 % ═════════════════════════════════════════════════════════════════════════
 \section{Discussion}
