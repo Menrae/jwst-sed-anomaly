@@ -145,16 +145,31 @@ class DiagnosticPlotter:
     """Produces the diagnostic figures and summary table for the b1 catalogue."""
 
     def redshift_anomaly_rate(
-        self, ds: xr.Dataset, output_dir: Union[str, Path], dz: float = 0.5, score_threshold: float = 0.8
+        self, ds: xr.Dataset, output_dir: Union[str, Path], dz: float = 0.5, top_fraction: float = 0.02
     ) -> Path:
         """Bin sources into redshift shells of width `dz` and plot the anomaly
-        rate (fraction with `ENSEMBLE_SCORE_VAR` > `score_threshold`) per bin,
-        with Poisson error bars on the flagged count.
+        rate (fraction scoring at or above the global top-`top_fraction`
+        quantile of `ENSEMBLE_SCORE_VAR`) per bin, with Poisson error bars on
+        the flagged count.
+
+        Uses a quantile threshold rather than a fixed absolute one (e.g.
+        "> 0.8") because `ENSEMBLE_SCORE_VAR` has no fixed scale: when
+        UMAP+DBSCAN assigns no sources to its noise cluster, the ensemble
+        score never exceeds 0.5, and an absolute threshold silently flags
+        nothing. This mirrors the top-`outlier_fraction` convention used
+        elsewhere in the pipeline (`sky_distribution`,
+        `notebooks/04_interpretation.ipynb`). Sources excluded from scoring
+        (`qc_eazy_fit_failure`, NaN score) are dropped before binning and
+        before computing the threshold.
 
         Saves to `<output_dir>/anomaly_rate_vs_redshift.pdf`.
         """
         z = ds["z_phot"].values
         score = ds[ENSEMBLE_SCORE_VAR].values
+        scored = ~np.isnan(score)
+        z = z[scored]
+        score = score[scored]
+        threshold = np.quantile(score, 1 - top_fraction)
 
         z_min = np.floor(np.nanmin(z) / dz) * dz
         z_max = np.ceil(np.nanmax(z) / dz) * dz
@@ -167,7 +182,7 @@ class DiagnosticPlotter:
             n = int(mask.sum())
             if n == 0:
                 continue
-            k = int((score[mask] > score_threshold).sum())
+            k = int((score[mask] >= threshold).sum())
             centers.append((edges[b] + edges[b + 1]) / 2)
             rates.append(k / n)
             errs.append(np.sqrt(k) / n)  # Poisson error on k, propagated to a rate
@@ -175,7 +190,7 @@ class DiagnosticPlotter:
         fig, ax = plt.subplots(figsize=(7, 5))
         ax.errorbar(centers, rates, yerr=errs, fmt="o-", capsize=3, color="steelblue")
         ax.set_xlabel("Photometric redshift ($z_{phot}$)")
-        ax.set_ylabel(f"Anomaly rate (fraction with {ENSEMBLE_SCORE_VAR} > {score_threshold})")
+        ax.set_ylabel(f"Anomaly rate (top {top_fraction:.0%} of {ENSEMBLE_SCORE_VAR})")
         ax.set_title("Anomaly rate vs. redshift")
         ax.set_ylim(bottom=0)
         fig.tight_layout()
@@ -344,7 +359,10 @@ def run_full_pipeline(config_path: Union[str, Path], survey: Optional[str] = Non
     b1_ds = apply_quality_pipeline(a1_ds, quality_config_path)
 
     ensemble_score = b1_ds[ENSEMBLE_SCORE_VAR].values
-    n_flagged = int((ensemble_score > 0.8).sum())
+    outlier_fraction = config.get("quality", {}).get("outlier_fraction", 0.02)
+    scored = ~np.isnan(ensemble_score)
+    score_threshold = np.quantile(ensemble_score[scored], 1 - outlier_fraction)
+    n_flagged = int((ensemble_score >= score_threshold).sum())
     top_n = min(20, b1_ds.sizes["source_id"])
     # NaN-safe descending order: sources excluded from scoring (e.g.
     # qc_eazy_fit_failure) carry a NaN score and must sort last, not first
