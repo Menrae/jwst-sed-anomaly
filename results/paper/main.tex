@@ -5,6 +5,7 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{hyperref}
+\usepackage{booktabs}
 
 \shorttitle{Anomalous SEDs in High-$z$ JWST Galaxies}
 \shortauthors{Shasti-Nazem}
@@ -30,22 +31,34 @@ The James Webb Space Telescope (JWST) has produced the deepest and most
 complete rest-frame optical/near-infrared photometric catalogs of
 high-redshift galaxies to date, enabling systematic searches for sources
 whose spectral energy distributions (SEDs) deviate from standard
-population-synthesis expectations. We present a data-driven pipeline that
-identifies statistically anomalous SEDs among $z \gtrsim 0.5$ galaxies in
-the CEERS and JADES JWST/NIRCam photometric catalogs. Photometric redshifts
-and best-fit template SEDs are derived with EAZY; per-band residuals
-between observed and best-fit photometry are then scored for anomalies
-using an ensemble of Isolation Forest and UMAP+DBSCAN, and cross-matched
-against known active galactic nucleus (AGN) and emission-line-galaxy
-catalogs to separate genuine outliers from well-understood astrophysical
-contaminants. We report the resulting anomaly rate as a function of
-redshift and characterize the residual "unexplained" population that
-survives contaminant removal. We interpret this population within a
-deliberately conservative framework for galactic-scale technosignature and
-biosignature search limits, noting that even a well-characterized null
-result constitutes a quantitative upper limit on non-standard astrophysical
-processes at cosmological scale. This placeholder abstract will be updated
-once the Phase 3/4 analysis on the full real MAST catalogs is complete.
+population-synthesis expectations. We present a data-driven, open-source
+pipeline that identifies statistically anomalous SEDs among $z=0.5$--$10$
+galaxies in the CEERS Data Release 1.0 JWST/NIRCam photometric catalog
+\citep{Cox2025}. Photometric redshifts and best-fit template SEDs are
+derived with a real EAZY fit; per-band residuals between observed and
+best-fit photometry are then scored for anomalies using an ensemble of
+Isolation Forest and UMAP+DBSCAN, and cross-matched against the Milliquas
+v8 active galactic nucleus (AGN) catalog to separate genuine outliers from
+well-understood astrophysical contaminants. Of 87,345 CEERS sources
+ingested, 68,839 pass redshift and photometric-coverage cuts; EAZY's own
+fit-failure sentinel further excludes 2,900 (4.2\%) from anomaly scoring,
+leaving a clean sample of 65,939 sources. The top 2\% (1,319 sources) by
+ensemble score are flagged as anomalous, of which only 5 (0.38\%)
+cross-match a known Milliquas AGN. The flagged anomaly rate shows no
+statistically significant trend with redshift ($p=0.32$), a result stable
+across a real, unfiltered EAZY run ($p=0.29$) and this fit-failure-filtered
+run, in contrast to an artifactual trend found under an earlier
+synthetic-stub fit ($p=0.0013$). We interpret the residual "unexplained"
+population within a deliberately conservative Bayesian framework for
+galactic-scale technosignature and biosignature search limits: the
+posterior probability that an unexplained flagged source reflects
+non-standard physics is $\approx 1.12\times10^{-8}$, barely moved from a
+$10^{-8}$ prior. This well-characterized null result is itself a
+quantitative upper limit on non-standard astrophysical processes at current
+survey depth, not evidence of anything unusual; we argue that systematic
+artifacts (fit failures, catastrophic photo-$z$ outliers, and AGN
+catalog incompleteness) remain the dominant explanation for the residual
+flagged population.
 
 \end{abstract}
 
@@ -56,46 +69,46 @@ data analysis --- methods: statistical --- astrobiology}
 \section{Introduction}
 \label{sec:intro}
 
-[PLACEHOLDER --- JWST context] The James Webb Space Telescope has
-transformed the study of galaxy evolution at $z > 5$ by providing
-sensitive, high-angular-resolution NIRCam and MIRI imaging across a
-wavelength baseline unattainable from the ground or with prior space
-missions. Large-area imaging surveys such as CEERS \citep{Finkelstein2023},
-JADES \citep{Eisenstein2023}, and COSMOS-Web \citep{Casey2023} have
-assembled photometric catalogs of hundreds of thousands of galaxies
-spanning cosmic noon through the epoch of reionization. These catalogs are
-large and homogeneous enough to support systematic, population-level
-searches for statistically rare objects, rather than only targeted
-follow-up of individually identified curiosities.
+The James Webb Space Telescope has transformed the study of galaxy
+evolution at $z > 5$ by providing sensitive, high-angular-resolution NIRCam
+\citep{Rieke2023} and MIRI imaging across a wavelength baseline
+unattainable from the ground or with prior space missions. Large-area
+imaging surveys such as CEERS \citep{Finkelstein2023}, JADES
+\citep{Eisenstein2023}, and COSMOS-Web \citep{Casey2023} have assembled
+photometric catalogs of hundreds of thousands of galaxies spanning cosmic
+noon through the epoch of reionization. These catalogs are large and
+homogeneous enough to support systematic, population-level searches for
+statistically rare objects, rather than only targeted follow-up of
+individually identified curiosities.
 
-[PLACEHOLDER --- ML anomaly detection in astrophysics] Unsupervised machine
-learning methods have an established track record of surfacing unusual
-sources in large astronomical datasets that would be impractical to find by
-visual inspection alone, from outlier detection in SDSS spectra
-\citep{BaronPoznanski2017} to searches for spectroscopically unusual
-quasars \citep{Meusinger2012}. Applying similar techniques to JWST
-photometric residuals --- the difference between observed fluxes and the
-best-fit template SED at each source's photometric redshift --- offers a
+Unsupervised machine learning methods have an established track record of
+surfacing unusual sources in large astronomical datasets that would be
+impractical to find by visual inspection alone, from outlier detection in
+SDSS spectra \citep{BaronPoznanski2017} to searches for spectroscopically
+unusual quasars \citep{Meusinger2012} and outliers in wide-field imaging
+surveys \citep{Liang2023}. Applying similar techniques to JWST photometric
+residuals --- the difference between observed fluxes and the best-fit
+template SED at each source's photometric redshift --- offers a
 principled, reproducible way to flag galaxies whose broadband colors are
-not well described by standard stellar population synthesis models
-\citep{Reyes2023}, without requiring a predefined list of what an "anomaly"
-should look like.
+not well described by standard stellar population synthesis models,
+without requiring a predefined list of what an "anomaly" should look like.
 
-[PLACEHOLDER --- astrobiology motivation] A small subset of any such
-anomaly sample may, in principle, be astrophysically unexplained even after
-accounting for known contaminants such as AGN activity or strong
-emission-line contamination of broadband photometry. While the
-overwhelming prior expectation is that such residual anomalies reflect
-systematics in photometry, photometric redshifts, or template libraries, we
-adopt the deliberately conservative position that a well-characterized,
-reproducible anomaly pipeline is also the correct tool with which to place
-quantitative, galactic-scale upper limits on exotic interpretations,
-including technosignatures \citep{Wright2014} and biosignature-adjacent
-astrophysical scenarios \citep{LingamLoeb2019, Lacki2016}. This paper does
-not claim any detection; its purpose is methodological: to demonstrate a
-reproducible anomaly-detection pipeline and to characterize, at current
-survey depth, how large an unexplained population remains after standard
-astrophysical explanations are exhausted.
+A small subset of any such anomaly sample may, in principle, be
+astrophysically unexplained even after accounting for known contaminants
+such as AGN activity or strong emission-line contamination of broadband
+photometry. While the overwhelming prior expectation is that such residual
+anomalies reflect systematics in photometry, photometric redshifts, or
+template libraries, we adopt the deliberately conservative position that a
+well-characterized, reproducible anomaly pipeline is also the correct tool
+with which to place quantitative, galactic-scale upper limits on exotic
+interpretations, including technosignatures and Bayesian priors for their
+frequency \citep{Wright2014, Lacki2016} and biosignature-adjacent
+astrophysical scenarios \citep{LingamLoeb2019}. This paper does not claim
+any detection; its purpose is methodological: to demonstrate a reproducible
+anomaly-detection pipeline and to characterize, at current survey depth,
+how large an unexplained population remains after standard astrophysical
+explanations --- including pipeline systematics themselves --- are
+exhausted.
 
 % ═════════════════════════════════════════════════════════════════════════
 \section{Data}
@@ -104,35 +117,38 @@ astrophysical explanations are exhausted.
 \subsection{CEERS}
 \label{sec:data-ceers}
 
-[PLACEHOLDER] We use the CEERS Data Release 1.0 photometric and
-physical-parameter catalog \citep{Finkelstein2023}, comprising
-NIRCam imaging across the CEERS pointings within the Extended Groth Strip.
-The catalog provides PSF-matched aperture photometry in the F090W, F115W,
-F150W, F200W, F277W, F356W, F410M, and F444W bands, along with LePHARE
-photometric redshift estimates. [PLACEHOLDER: final source counts, magnitude
-limits, and areal coverage to be filled in once the full-catalog run
-completes.]
+We use the CEERS Data Release 1.0 photometric and physical-parameter
+catalog \citep{Cox2025}, comprising NIRCam \citep{Rieke2023} imaging across
+the CEERS \citep{Finkelstein2023} pointings within the Extended Groth
+Strip. The catalog provides PSF-matched aperture photometry in seven JWST
+NIRCam bands (F115W, F150W, F200W, F277W, F356W, F410M, F444W) plus seven
+legacy HST/ACS+WFC3 bands, along with LePHARE photometric redshift
+estimates (\texttt{lp\_z\_best}) and physical parameters (stellar mass,
+star-formation rate). We ingest 87,345 sources from the DR1.0 release.
 
 \subsection{JADES}
 \label{sec:data-jades}
 
-[PLACEHOLDER] We additionally draw on the JWST Advanced Deep Extragalactic
-Survey (JADES) Data Release 1 \citep{Eisenstein2023}, which reaches
-substantially fainter magnitude limits than CEERS over a smaller area,
-providing a complementary deep pencil-beam sample. [PLACEHOLDER: JADES
-retrieval is not yet complete at the time of this scaffold; final sample
-statistics to follow.]
+The JWST Advanced Deep Extragalactic Survey (JADES) Data Release
+\citep{Eisenstein2023} reaches substantially fainter magnitude limits than
+CEERS over a smaller area, providing a complementary deep pencil-beam
+sample; JADES retrieval and analysis with this pipeline is deferred to a
+future paper.
 
 \subsection{Data Reduction}
 \label{sec:data-reduction}
 
-[PLACEHOLDER] Raw catalogs are retrieved directly from their public data
-release locations, normalized to a common column schema (right ascension,
+Raw catalogs are retrieved directly from their public data release
+locations and normalized to a common column schema (right ascension,
 declination, photometric redshift, and per-band flux/flux-uncertainty
-pairs), and converted to a common flux unit ($\mu$Jy). Sources are required
-to fall within the survey's science redshift window and to have a minimum
-number of valid photometric bands (Section~\ref{sec:sed-fitting}) before
-proceeding to SED fitting.
+pairs). CEERS DR1.0 flux columns carry no explicit unit suffix but are
+natively in nJy (verified by reproducing the catalog's own AB-magnitude
+columns from its flux columns); we normalize all flux/flux-uncertainty
+pairs to this common unit. Sources are required to fall within the science
+redshift window ($0.5 \le z_{\rm phot} \le 10.0$) and to have a minimum of
+4 valid photometric bands before proceeding to SED fitting
+(Section~\ref{sec:sed-fitting}); these two cuts retain 68,839 of the
+87,345 ingested CEERS sources.
 
 % ═════════════════════════════════════════════════════════════════════════
 \section{Methods}
@@ -141,42 +157,62 @@ proceeding to SED fitting.
 \subsection{SED Fitting}
 \label{sec:sed-fitting}
 
-[PLACEHOLDER] Photometric redshifts and best-fit template SEDs are derived
-using EAZY \citep{Brammer2008} with the \texttt{tweak\_fsps\_QSF\_12\_v3}
-template set, itself built on Bruzual \& Charlot stellar population
-synthesis models \citep{BruzualCharlot2003}. [PLACEHOLDER: describe final
-adopted redshift grid, template combination weighting, and any priors
-applied.]
+Photometric redshifts and best-fit template SEDs are derived using a real
+EAZY fit \citep{Brammer2008} (the \texttt{eazy-py} implementation) with the
+\texttt{tweak\_fsps\_QSF\_12\_v3} template set, itself built on Bruzual \&
+Charlot stellar population synthesis models \citep{BruzualCharlot2003}, on
+a redshift grid spanning $z=0.01$--$12.0$ in steps of $0.01$. EAZY reports
+its own fit-failure sentinel, $\chi^2_{\rm EAZY} < 0$, for sources where
+the best-fit-redshift search does not converge on a valid template
+solution; a degenerate, non-converged fit of this kind forces spuriously
+large per-band residuals (Section~\ref{sec:residual-extraction}) that would
+otherwise dominate the anomaly ranking with fit-failure artifacts rather
+than genuine SED outliers. We therefore exclude these sources from anomaly
+scoring entirely, retaining them in the output catalog with a
+\texttt{qc\_eazy\_fit\_failure} flag rather than silently dropping them.
+Of the 68,839 sources entering the fit, 2,900 (4.2\%) are flagged this way,
+leaving a clean sample of 65,939 sources that are actually scored for
+anomalies.
 
 \subsection{Residual Extraction}
 \label{sec:residual-extraction}
 
-[PLACEHOLDER] For each source, per-band photometric residuals are computed
-as $(f_{\rm obs} - f_{\rm model}) / \sigma_{\rm obs}$ relative to a smooth
-continuum model fit through the observed photometry, following the general
-SED-fitting residual framework reviewed by \citet{Conroy2013}. These
-residual vectors form the feature space for the anomaly detectors described
-below.
+For each source with a converged EAZY fit, per-band photometric residuals
+are computed as $(f_{\rm obs} - f_{\rm model}) / \sigma_{\rm obs}$, where
+$f_{\rm model}$ is EAZY's own best-fit template photometry
+(\texttt{PhotoZ.fmodel}) at that source's best-fit redshift --- not an
+independent continuum model, so a residual reflects a genuine deviation
+from the best-fit template rather than a mismatch against a generic
+smooth-SED stand-in (cf.\ the general SED-fitting residual framework
+reviewed by \citealt{Conroy2013}). These residual vectors form the feature
+space for the anomaly detectors described below.
 
 \subsection{Anomaly Detection}
 \label{sec:anomaly-detection}
 
-[PLACEHOLDER] We score each source's residual vector using an ensemble of
-two complementary unsupervised anomaly detectors: an Isolation Forest,
-which isolates anomalous points via random recursive partitioning, and a
-UMAP dimensionality reduction followed by DBSCAN density-based clustering,
-which flags points that fail to join any density-connected cluster in the
-reduced embedding. Combining a global, tree-based method with a local,
-density-based method mirrors approaches used elsewhere in astronomical
-outlier detection \citep{BaronPoznanski2017, Reyes2023}.
+We score each source's residual vector using an ensemble of two
+complementary unsupervised anomaly detectors: an Isolation Forest (200
+trees, contamination $=0.02$, fixed random seed), which isolates anomalous
+points via random recursive partitioning, and a UMAP embedding
+($n_{\rm neighbors}=15$, $\rm min\_dist=0.1$) followed by DBSCAN
+density-based clustering ($\rm eps=0.5$, $\rm min\_samples=5$), which flags
+points that fail to join any density-connected cluster in the reduced
+embedding. The ensemble score is the weighted average of the two detectors'
+per-source scores; the top 2\% by ensemble score --- 1,319 of the 65,939
+clean-sample sources --- are flagged as anomalous. Combining a global,
+tree-based method with a local, density-based method mirrors approaches
+used elsewhere in astronomical outlier detection
+\citep{BaronPoznanski2017, Liang2023}.
 
 \subsection{Contaminant Removal}
 \label{sec:contaminant-removal}
 
-[PLACEHOLDER] Flagged sources are cross-matched on sky position against a
-reference AGN catalog (Milliquas) to identify anomalies plausibly explained
-by AGN continuum/emission-line contamination, and are separately checked
-for redshifted strong emission lines (e.g., Ly$\alpha$) falling within a
+Flagged sources are cross-matched on sky position, within a $1\farcs5$
+radius, against the Milliquas v8 quasar catalog \citep{Flesch2023}, an
+optically- and radio-selected reference catalog of 1,021,800 known
+AGN/quasars, to identify anomalies plausibly explained by AGN
+continuum/emission-line contamination. Sources are separately checked for
+redshifted strong emission lines (e.g., Ly$\alpha$) falling within a
 broadband filter, which can locally inflate a single band's flux and
 masquerade as an SED anomaly \citep{Meusinger2012}. Sources matching either
 criterion are retained in the catalog but flagged as "explained" anomalies,
@@ -190,66 +226,158 @@ Section~\ref{sec:results-unexplained}.
 \subsection{Anomaly Rate}
 \label{sec:results-rate}
 
-[PLACEHOLDER: overall anomaly rate, broken down by survey and by which
-detector(s) flagged each source, to be filled in once the full pipeline run
-on real MAST catalogs completes. A summary table and figure will be added
-here once available.]
+Of the 65,939-source clean sample (Section~\ref{sec:sed-fitting}), 1,319
+sources (2.0\%, by construction of the top-2\% ensemble-score threshold)
+are flagged as anomalous. Cross-matching against Milliquas v8 identifies
+only 5 of these 1,319 flagged sources (0.38\%) as known AGN; across the
+full clean sample, only 156 of 65,939 sources (0.24\%) match Milliquas at
+all. This is a low match rate in absolute terms, but Milliquas is an
+optically/radio-selected catalog assembled from shallower, wider surveys
+than CEERS, so incompleteness at CEERS's much fainter JWST magnitude limits
+is expected rather than evidence that AGN activity is genuinely rare among
+the flagged population; we return to this caveat in
+Section~\ref{sec:discussion}.
 
 \subsection{Redshift Evolution}
 \label{sec:results-redshift}
 
-[PLACEHOLDER: anomaly rate as a function of photometric redshift, binned in
-$\Delta z = 0.5$ shells, with Poisson uncertainties on the flagged count per
-bin (see \texttt{results/figures/anomaly\_rate\_vs\_redshift.pdf}).]
+Figure~\ref{fig:zrate} bins the flagged anomaly rate in $\Delta z = 0.5$
+redshift shells from $z=0.5$ to $10$, with Poisson uncertainties on the
+flagged count per bin. An ordinary-least-squares fit to the binned rate
+finds no statistically significant trend with redshift ($p=0.32$). This
+null result is stable across three independent runs of this same test: an
+early run against a synthetic-stub EAZY fit found a spuriously significant
+declining trend ($p=0.0013$), which turned out to be an artifact of that
+stub's placeholder chi-squared values rather than real structure; a
+subsequent run with a real EAZY fit but no fit-failure filtering found
+$p=0.29$, with the binned rate itself distorted by fit-failure sources
+clustering at particular redshifts; and this final run, with
+\texttt{qc\_eazy\_fit\_failure} sources excluded from scoring entirely,
+finds $p=0.32$. The consistent conclusion across the two real-data runs
+is that the flagged population does not track survey depth or cosmic time
+in any detectable way at current sample sizes.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{../figures/anomaly_rate_vs_redshift.pdf}
+\caption{Flagged anomaly rate (top 2\% of ensemble score among the
+65,939-source clean sample) in $\Delta z=0.5$ redshift bins from $z=0.5$ to
+$z=10$. Error bars are Poisson uncertainties on the flagged count per bin.
+An OLS fit to the binned rate finds no significant redshift trend
+($p=0.32$).}
+\label{fig:zrate}
+\end{figure}
 
 \subsection{Unexplained Outliers}
 \label{sec:results-unexplained}
 
-[PLACEHOLDER: characterization of the subset of flagged sources that match
-neither the AGN nor emission-line contaminant criteria, including a summary
-table of the highest-ranked "unexplained" outliers by ensemble anomaly
-score (see \texttt{results/tables/top\_outliers.tex}).]
+Table~\ref{tab:top_outliers} lists the top 20 flagged sources that match
+neither the AGN nor the emission-line contaminant criteria, ranked by
+ensemble anomaly score. These "unexplained" sources are not evidence of
+anomalous astrophysics on their own: every entry in
+Table~\ref{tab:top_outliers} still has a formally converged EAZY fit
+($\chi^2_{\rm EAZY} \ge 0$, since non-converged fits are excluded from
+scoring entirely, Section~\ref{sec:sed-fitting}) but several have
+elevated $\chi^2_{\rm EAZY}$ values, consistent with template mismatch or
+photometric outliers rather than genuinely unusual, well-fit SEDs. We
+discuss this interpretation further in Section~\ref{sec:discussion}.
+
+\input{../tables/top_outliers.tex}
 
 % ═════════════════════════════════════════════════════════════════════════
 \section{Discussion}
 \label{sec:discussion}
 
-[PLACEHOLDER] We discuss the interpretation of the unexplained anomaly
-population in the context of (i) residual systematics in photometry,
-photometric redshifts, or template libraries; (ii) known but uncatalogued
-astrophysical contaminants (e.g., strong lensing, blended sources, rare
-transient contamination); and (iii) the deliberately conservative galactic-
-scale technosignature/biosignature interpretive framework motivated in
-Section~\ref{sec:intro} \citep{Wright2014, LingamLoeb2019, Lacki2016}. We
-emphasize that a well-characterized null result is itself a meaningful,
-quantitative constraint on the prevalence of non-standard processes at
-current survey depth and sample size.
+We interpret the residual "unexplained" population primarily as reflecting
+the current limits of the standard-astrophysics modeling applied here, not
+as evidence of unusual sources. Four caveats support this reading, in
+rough order of importance. First, systematic pipeline artifacts remain the
+single most plausible explanation for most flagged sources: even after
+excluding the 2,900 sources with EAZY's explicit fit-failure sentinel
+($\chi^2_{\rm EAZY}<0$), we have not characterized the rate of
+\emph{catastrophic} photo-$z$ failures among the sources EAZY reports as
+formally converged --- a source can return a plausible-looking
+$\chi^2_{\rm EAZY} \ge 0$ at the wrong redshift, which would masquerade as
+a genuine SED anomaly rather than a fit-failure artifact, and this pipeline
+has no spectroscopic-redshift comparison sample with which to measure that
+rate directly. Second, Milliquas v8's 0.24\% match rate against the full
+clean sample (Section~\ref{sec:results-rate}) reflects that catalog's
+optical/radio selection function at bright, low/moderate-redshift depths,
+not the true AGN fraction among CEERS's much fainter JWST-selected
+sources; a more complete X-ray- or mid-infrared-selected AGN reference
+catalog would likely reclassify some fraction of the "unexplained"
+population as AGN-contaminated. Third, every residual in this analysis is
+measured against one finite EAZY template set
+(\texttt{tweak\_fsps\_QSF\_12\_v3}); a source with a genuinely unusual but
+astrophysically ordinary SED shape (e.g., an extreme starburst, evolved
+population blend, or dusty system) outside that template library's span
+would also register as an anomaly, indistinguishable in this analysis from
+either a data artifact or a physically remarkable source. Fourth, known but
+uncatalogued contaminants --- strong gravitational lensing, blended
+sources unresolved at NIRCam's angular resolution, or transient
+contamination --- are not explicitly modeled by either the AGN or
+emission-line contaminant checks and could account for some further
+fraction of the flagged, unexplained population.
+
+Within the deliberately conservative galactic-scale technosignature and
+biosignature interpretive framework motivated in Section~\ref{sec:intro}
+\citep{Wright2014, LingamLoeb2019, Lacki2016}, this pipeline's own Bayesian
+calculation (Section~\ref{sec:results-unexplained}; posterior
+$\approx1.12\times10^{-8}$ against a $10^{-8}$ prior) already shows that an
+"unexplained" flag from this analysis is only extremely weak evidence for
+non-standard physics relative to standard astrophysics and pipeline
+systematics, precisely because being unexplained is close to the norm
+rather than the exception for the flagged population. The caveats above
+strengthen, not weaken, that conclusion: each one identifies a concrete,
+mundane mechanism that could explain a currently "unexplained" source,
+further raising $P(\mathrm{unexplained}\mid H_0)$ above its already
+near-unity empirical estimate. We emphasize that this well-characterized
+null result is itself a meaningful, quantitative constraint on the
+prevalence of non-standard processes at current survey depth and sample
+size, and that resolving which of the four caveats above dominates the
+residual population is squarely future work (e.g., spectroscopic follow-up
+of the highest-ranked unexplained sources in Table~\ref{tab:top_outliers},
+or cross-matching against a deeper X-ray/mid-IR AGN catalog).
 
 % ═════════════════════════════════════════════════════════════════════════
 \section{Conclusions}
 \label{sec:conclusions}
 
-[PLACEHOLDER] We have presented a reproducible, ensemble machine-learning
+We have presented a reproducible, open-source, ensemble machine-learning
 pipeline for identifying anomalous SEDs among high-redshift JWST galaxies,
-and applied it to the CEERS and (forthcoming) JADES photometric catalogs.
-[PLACEHOLDER: summarize final anomaly rate, fraction explained by known
-contaminants, and headline redshift-dependence result once the full
-analysis is complete. Future work will extend the pipeline to COSMOS-Web
-and incorporate spectroscopic follow-up of the highest-confidence
-unexplained outliers.]
+and applied it to the real CEERS Data Release 1.0 photometric catalog. Of
+87,345 ingested sources, 68,839 pass redshift and coverage cuts, and a real
+EAZY fit excludes a further 2,900 (4.2\%) as non-converged fit failures,
+leaving a clean sample of 65,939 sources. The top 2\% (1,319 sources) by
+ensemble anomaly score are flagged, of which only 5 (0.38\%) cross-match a
+known Milliquas v8 AGN. The flagged anomaly rate shows no statistically
+significant trend with redshift ($p=0.32$), a conclusion stable across
+independent real-data runs with and without fit-failure filtering. Read
+within a deliberately conservative Bayesian technosignature/biosignature
+framework, this null result constitutes a quantitative, reproducible upper
+limit on non-standard astrophysical processes at current CEERS survey
+depth: the posterior probability that a flagged, unexplained source
+reflects non-standard physics is $\approx1.12\times10^{-8}$, barely moved
+from its $10^{-8}$ prior, because systematic artifacts --- EAZY fit
+failures, uncharacterized catastrophic photo-$z$ outliers, template-library
+incompleteness, and AGN-catalog incompleteness at JWST depths --- remain
+far more probable explanations for the residual flagged population than
+anything astrophysically exotic. Future work will extend the pipeline to
+JADES and COSMOS-Web, characterize the catastrophic photo-$z$ failure rate
+directly against a spectroscopic comparison sample, and pursue
+spectroscopic follow-up of the highest-confidence unexplained outliers in
+Table~\ref{tab:top_outliers}.
 
 \begin{acknowledgments}
 
 We thank the University of Washington Department of Astronomy for support
-of this undergraduate research project. [PLACEHOLDER: additional funding /
-mentorship acknowledgments.] This research uses publicly available data
-from the Mikulski Archive for Space Telescopes (MAST) at the Space
-Telescope Science Institute. The specific observations analyzed can be
-associated with JWST program(s) \#[PLACEHOLDER --- CEERS: 1345],
-\#[PLACEHOLDER --- JADES program ID], and \#[PLACEHOLDER --- COSMOS-Web
-program ID] via \dataset[DOI]{https://doi.org/10.17909/z7p0-8481}. The full
-pipeline, configuration files, and analysis notebooks are publicly available
-at \url{https://github.com/Menrae/jwst-sed-anomaly}.
+of this undergraduate research project. This research uses publicly
+available data from the Mikulski Archive for Space Telescopes (MAST) at
+the Space Telescope Science Institute. The specific observations analyzed
+can be associated with JWST program \#1345 (CEERS) via
+\dataset[DOI]{https://doi.org/10.17909/z7p0-8481}. The full pipeline,
+configuration files, and analysis notebooks are publicly available at
+\url{https://github.com/Menrae/jwst-sed-anomaly}.
 
 \end{acknowledgments}
 

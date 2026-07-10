@@ -271,6 +271,13 @@ class DiagnosticPlotter:
             label="tab:top_outliers",
             position="ht",
         )
+        # 7 numeric columns don't fit a single column in a twocolumn AASTeX
+        # document (e.g. results/paper/main.tex) -- span both columns.
+        # table* is a no-op in single-column documents, so this is safe
+        # everywhere this table gets \input'd.
+        latex = latex.replace(r"\begin{table}", r"\begin{table*}").replace(
+            r"\end{table}", r"\end{table*}"
+        )
 
         output_path = Path(output_dir) / "top_outliers.tex"
         output_path.parent.mkdir(parents=True, exist_ok=True)

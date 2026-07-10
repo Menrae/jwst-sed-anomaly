@@ -242,7 +242,9 @@ def test_score_summary_table_excludes_agn_and_emission_line_matches(tmp_path, b1
 
     assert out_path == tmp_path / "top_outliers.tex"
     content = out_path.read_text()
-    assert r"\begin{table}" in content and r"\label{tab:top_outliers}" in content
+    # table* (not table): 7 numeric columns don't fit a single column in a
+    # twocolumn AASTeX document, so score_summary_table spans both columns.
+    assert r"\begin{table*}" in content and r"\label{tab:top_outliers}" in content
 
     ids_in_table = _parse_latex_table_ids(content)
     assert 0 < len(ids_in_table) <= 20
@@ -268,6 +270,6 @@ def test_score_summary_table_handles_int_typed_qc_flags(tmp_path, synthetic_cata
 
     assert out_path.exists()
     content = out_path.read_text()
-    assert r"\begin{table}" in content
+    assert r"\begin{table*}" in content
     ids_in_table = _parse_latex_table_ids(content)
     assert len(ids_in_table) == 20  # all sources are "unexplained" (flags are all-zero/False)
