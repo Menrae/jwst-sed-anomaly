@@ -197,12 +197,45 @@ points via random recursive partitioning, and a UMAP embedding
 ($n_{\rm neighbors}=15$, $\rm min\_dist=0.1$) followed by DBSCAN
 density-based clustering ($\rm eps=0.5$, $\rm min\_samples=5$), which flags
 points that fail to join any density-connected cluster in the reduced
-embedding. The ensemble score is the weighted average of the two detectors'
-per-source scores; the top 2\% by ensemble score --- 1,319 of the 65,939
-clean-sample sources --- are flagged as anomalous. Combining a global,
-tree-based method with a local, density-based method mirrors approaches
-used elsewhere in astronomical outlier detection
-\citep{BaronPoznanski2017, Liang2023}.
+embedding.
+
+For a source with residual feature vector $x$, scored against an ensemble
+of isolation trees built on $n$ points, the Isolation Forest anomaly score
+is \citep{Liu2008}
+\begin{equation}
+s(x, n) = 2^{-E(h(x))/c(n)},
+\label{eq:isoforest}
+\end{equation}
+where $E(h(x))$ is the mean path length to isolate $x$, averaged over the
+200 trees, and
+\begin{equation}
+c(n) = 2H(n-1) - \frac{2(n-1)}{n}
+\label{eq:isoforest-norm}
+\end{equation}
+is the average path length of an unsuccessful search in a binary search
+tree of $n$ nodes ($H(i)=\ln i + \gamma$ the harmonic number), which
+normalizes $s$ onto $(0,1]$ independent of sample size. Scores approaching
+1 correspond to points isolated by unusually short average path lengths
+(anomalous); scores near 0.5 correspond to typical points.
+
+The ensemble score reported throughout this paper (\texttt{qc\_anomaly\_score})
+is an equal-weighted average of the two detectors' per-source scores ---
+Isolation Forest weight $0.5$, UMAP+DBSCAN weight $0.5$ --- rather than a
+tuned combination, since no labelled anomaly set exists with which to
+optimize relative weights (Section~\ref{sec:completeness-purity}). On this
+dataset, UMAP+DBSCAN's binary noise flag is 0 for every source (DBSCAN
+assigns no points to the noise cluster at the configured \texttt{eps}); the
+ensemble score therefore reduces exactly to the Isolation Forest score
+scaled by $0.5$, capping the effective anomaly score at $0.5$ rather than
+$1.0$. Figure~\ref{fig:umap} shows the UMAP embedding directly: the top-2\%
+flagged sources concentrate at the periphery of the embedding rather than
+its dense core, so even though DBSCAN itself contributes no noise points at
+this \texttt{eps}, the embedding's geometry is still visibly informative
+about which sources the ensemble ultimately flags. The top 2\% by ensemble
+score --- 1,319 of the 65,939 clean-sample sources --- are flagged as
+anomalous. Combining a global, tree-based method with a local,
+density-based method mirrors approaches used elsewhere in astronomical
+outlier detection \citep{BaronPoznanski2017, Liang2023}.
 
 \subsection{Contaminant Removal}
 \label{sec:contaminant-removal}
@@ -218,6 +251,31 @@ masquerade as an SED anomaly \citep{Meusinger2012}. Sources matching either
 criterion are retained in the catalog but flagged as "explained" anomalies,
 distinct from the residual "unexplained" population discussed in
 Section~\ref{sec:results-unexplained}.
+
+\subsection{Completeness and Purity}
+\label{sec:completeness-purity}
+
+The 2\% flagging rate is a detection threshold set by construction
+(\texttt{quality.outlier\_fraction} in \texttt{pipeline\_config.yaml}), not
+a quantity estimated from labelled data. Under the null hypothesis that
+every source in the clean sample follows standard astrophysics, the
+expected number of sources flagged purely by this threshold's own
+definition is $0.02 \times 65{,}939 \approx 1{,}319$ --- the same count
+reported throughout this paper as "flagged," since the threshold is
+defined as a fixed top percentile of the ensemble score rather than an
+absolute cut calibrated against any independent anomaly criterion. This
+has a direct consequence for how the 2\% rate should be read: because no
+spectroscopically confirmed or otherwise independently labelled anomalous
+sources exist for this sample, we cannot estimate this pipeline's formal
+completeness (the fraction of true anomalies recovered) or purity (the
+fraction of flagged sources that are true anomalies) in the standard
+classifier-evaluation sense. We therefore explicitly do not claim that 2\%
+of CEERS galaxies are genuinely anomalous; the 2\% figure describes only
+how aggressively the ensemble score is thresholded, and every other number
+in this paper (the AGN/emission-line contaminant fractions, the
+unexplained fraction, the redshift-trend $p$-value) should be read as
+conditional on that threshold choice rather than as a measurement of a
+fixed, threshold-independent population.
 
 % ═════════════════════════════════════════════════════════════════════════
 \section{Results}
@@ -303,6 +361,19 @@ $p < 10^{-300}$).}
 \label{fig:masssfr}
 \end{figure}
 
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{../figures/umap_embedding.pdf}
+\caption{2D UMAP projection of the per-band SED residual vectors for the
+65,939-source clean sample (Section~\ref{sec:anomaly-detection}), colored
+by ensemble anomaly score (\texttt{qc\_anomaly\_score}). The top-2\%
+flagged anomalies (crimson open circles, $N=1{,}319$) concentrate at the
+periphery of the embedding rather than in its dense core, tracing the
+boundary of the density-connected region that UMAP+DBSCAN's noise
+criterion is designed to isolate.}
+\label{fig:umap}
+\end{figure}
+
 \subsection{Unexplained Outliers}
 \label{sec:results-unexplained}
 
@@ -318,6 +389,50 @@ photometric outliers rather than genuinely unusual, well-fit SEDs. We
 discuss this interpretation further in Section~\ref{sec:discussion}.
 
 \input{../tables/top_outliers.tex}
+
+\subsection{Bayesian Framing}
+\label{sec:results-bayesian}
+
+We frame the residual "unexplained" population within the deliberately
+conservative galactic-scale technosignature/biosignature interpretive
+approach motivated in Section~\ref{sec:intro}
+\citep{Wright2014, LingamLoeb2019, Lacki2016}. Let $H_1$ denote the
+hypothesis that a given unexplained flagged source's SED reflects
+non-standard physics, and $H_0$ the hypothesis that it reflects standard
+astrophysics or pipeline systematics (Section~\ref{sec:discussion}). Bayes'
+theorem gives the posterior
+\begin{equation}
+P(H_1\mid D) = \frac{P(D\mid H_1)\,P(H_1)}{P(D\mid H_1)\,P(H_1) +
+P(D\mid H_0)\,P(H_0)},
+\label{eq:bayes}
+\end{equation}
+where $D$ is the observation that a source is flagged and unexplained. We
+adopt a prior $P(H_1) = 10^{-8}$ per source, so $P(H_0) = 1-P(H_1)
+\approx 1$, and the maximally generous likelihood $P(D\mid H_1) = 1.0$
+(i.e., we assume any source whose SED genuinely reflected non-standard
+physics would certainly present as flagged and unexplained). For
+$P(D\mid H_0)$ we use the empirical rate of "unexplained" outcomes among
+already-\emph{flagged} sources under standard astrophysics alone: of the
+1,319 flagged sources, 1,174 match neither the AGN nor emission-line
+contaminant criterion, giving $P(D\mid H_0) = 1{,}174/1{,}319 = 0.890$.
+Substituting into Equation~\ref{eq:bayes},
+\begin{align}
+P(H_1\mid D) &= \frac{(1.0)(10^{-8})}{(1.0)(10^{-8}) +
+(0.890)(1-10^{-8})} \notag\\
+&= \frac{10^{-8}}{10^{-8} + 0.890} \approx 1.12\times10^{-8},
+\label{eq:bayes-result}
+\end{align}
+barely moved from the $10^{-8}$ prior. Because $P(D\mid H_0)$ is already
+close to the generous $P(D\mid H_1)=1$ assumed for $H_1$, the likelihood
+ratio is capped at $1/0.890\approx1.12$, so even the single most generous
+assumption available for $H_1$ cannot make an "unexplained" flag
+meaningfully diagnostic of non-standard physics: being unexplained is
+close to the norm for the flagged population under $H_0$ alone, not a rare
+occurrence that would need a special cause. Aggregating over all 1,174
+unexplained flagged sources under a simple independent-trials bound gives
+$P(\text{at least one is } H_1) = 1-(1-P(H_1\mid D))^{1{,}174}
+\approx 1.3\times10^{-5}$, a result dominated entirely by the prior rather
+than by anything in the data.
 
 \subsection{Summary Statistics}
 \label{sec:results-summary}
@@ -370,7 +485,7 @@ fraction of the flagged, unexplained population.
 Within the deliberately conservative galactic-scale technosignature and
 biosignature interpretive framework motivated in Section~\ref{sec:intro}
 \citep{Wright2014, LingamLoeb2019, Lacki2016}, this pipeline's own Bayesian
-calculation (Section~\ref{sec:results-unexplained}; posterior
+calculation (Section~\ref{sec:results-bayesian}; posterior
 $\approx1.12\times10^{-8}$ against a $10^{-8}$ prior) already shows that an
 "unexplained" flag from this analysis is only extremely weak evidence for
 non-standard physics relative to standard astrophysics and pipeline
@@ -410,11 +525,23 @@ from its $10^{-8}$ prior, because systematic artifacts --- EAZY fit
 failures, uncharacterized catastrophic photo-$z$ outliers, template-library
 incompleteness, and AGN-catalog incompleteness at JWST depths --- remain
 far more probable explanations for the residual flagged population than
-anything astrophysically exotic. Future work will extend the pipeline to
-JADES and COSMOS-Web, characterize the catastrophic photo-$z$ failure rate
-directly against a spectroscopic comparison sample, and pursue
-spectroscopic follow-up of the highest-confidence unexplained outliers in
-Table~\ref{tab:top_outliers}.
+anything astrophysically exotic.
+
+Four concrete extensions would sharpen these constraints. First, applying
+this pipeline to JADES and COSMOS-Web --- roughly five times CEERS's
+combined sample size --- would tighten the statistical power of both the
+redshift-trend test (Section~\ref{sec:results-redshift}) and the Bayesian
+framing (Section~\ref{sec:results-bayesian}). Second, JWST/NIRSpec
+spectroscopic follow-up of the highest-ranked unexplained sources in
+Table~\ref{tab:top_outliers} is the definitive discriminator between a
+genuine SED anomaly, a catastrophic photo-$z$ failure, and an unmodeled
+emission-line or AGN contaminant. Third, replacing the single
+\texttt{tweak\_fsps\_QSF\_12\_v3} EAZY template set with a broader
+fitting library (e.g., Prospector or CIGALE) would test whether template
+mismatch, rather than genuine anomalies, drives a meaningful share of the
+flagged population. Fourth, a spectroscopic comparison sample would let us
+directly characterize the catastrophic photo-$z$ failure rate this
+pipeline currently cannot measure (Section~\ref{sec:discussion}).
 
 \begin{acknowledgments}
 
