@@ -38,6 +38,24 @@ from pipeline.standardise import SEDStandardiser, log_data_level_transition
 
 logger = logging.getLogger(__name__)
 
+#: Dark, high-contrast plot style shared by all DiagnosticPlotter figures,
+#: matching the look established in notebooks/04_interpretation.ipynb (same
+#: crimson highlight colour) but bumped to print-quality DPI.
+plt.style.use("dark_background")
+plt.rcParams.update({
+    "figure.dpi": 150,
+    "savefig.dpi": 150,
+    "axes.titlesize": 14,
+    "axes.labelsize": 12,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+    "lines.linewidth": 1.5,
+    "axes.grid": True,
+    "grid.alpha": 0.3,
+    "errorbar.capsize": 4,
+})
+
 #: The ensemble anomaly score variable name on a b1 Dataset, as appended by
 #: `quality.apply_quality_pipeline`. Referred to as "ensemble_score" in the
 #: Prompt 4.1 spec; this constant is the single source of truth for it.
@@ -188,7 +206,9 @@ class DiagnosticPlotter:
             errs.append(np.sqrt(k) / n)  # Poisson error on k, propagated to a rate
 
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.errorbar(centers, rates, yerr=errs, fmt="o-", capsize=3, color="steelblue")
+        ax.errorbar(
+            centers, rates, yerr=errs, fmt="o-", capsize=4, linewidth=1.5, color="steelblue",
+        )
         ax.set_xlabel("Photometric redshift ($z_{phot}$)")
         ax.set_ylabel(f"Anomaly rate (top {top_fraction:.0%} of {ENSEMBLE_SCORE_VAR})")
         ax.set_title("Anomaly rate vs. redshift")
@@ -221,14 +241,14 @@ class DiagnosticPlotter:
         fig, ax = plt.subplots(figsize=(7, 6))
         ax.scatter(ra[~is_top], dec[~is_top], s=8, color="lightgray", label="all sources")
         ax.scatter(
-            ra[is_top], dec[is_top], s=45, color="crimson", edgecolor="k", linewidths=0.5,
+            ra[is_top], dec[is_top], s=45, color="#DC143C", edgecolor="white", linewidths=0.5,
             label=f"top {top_fraction:.0%} anomalies",
         )
         ax.set_xlabel("RA (deg)")
         ax.set_ylabel("Dec (deg)")
         ax.set_title("Sky distribution")
         ax.invert_xaxis()  # RA increases to the east; astronomical plots flip the axis
-        ax.legend(loc="best", fontsize=9)
+        ax.legend(loc="best")
         fig.tight_layout()
 
         output_path = Path(output_dir) / "sky_distribution.pdf"

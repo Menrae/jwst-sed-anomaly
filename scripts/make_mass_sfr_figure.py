@@ -37,6 +37,23 @@ from pipeline.standardise import SEDStandardiser
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Dark, high-contrast plot style matching notebooks/04_interpretation.ipynb
+# (same crimson highlight colour), bumped to print-quality DPI.
+plt.style.use("dark_background")
+plt.rcParams.update({
+    "figure.dpi": 150,
+    "savefig.dpi": 150,
+    "axes.titlesize": 14,
+    "axes.labelsize": 12,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+    "lines.linewidth": 1.5,
+    "axes.grid": True,
+    "grid.alpha": 0.3,
+    "errorbar.capsize": 4,
+})
+
 ROOT = Path(__file__).resolve().parent.parent
 RAW_CATALOGUE = ROOT / "data" / "raw" / "ceers_dr1.fits"
 CONFIG_PATH = ROOT / "config" / "pipeline_config.yaml"
@@ -144,7 +161,7 @@ def main() -> Path:
     ax.plot(ms_x, ms_y, color="white", lw=3, ls="--", zorder=2)
     ax.plot(ms_x, ms_y, color="k", lw=1.3, ls="--", label="Running median (main sequence)", zorder=3)
     ax.scatter(
-        mass_v[anomaly_v], sfr_v[anomaly_v], s=10, facecolors="none", edgecolors="crimson",
+        mass_v[anomaly_v], sfr_v[anomaly_v], s=10, facecolors="none", edgecolors="#DC143C",
         linewidths=0.6, alpha=0.8, label=f"Top {TOP_FRACTION:.0%} anomalous ($N={n_anomaly_valid}$)", zorder=4,
     )
     ax.set_xlim(xlim)
@@ -152,7 +169,7 @@ def main() -> Path:
     ax.set_xlabel(r"$\log_{10}(M_\star / M_\odot)$")
     ax.set_ylabel(r"$\log_{10}(\mathrm{SFR} / M_\odot\,\mathrm{yr}^{-1})$")
     ax.set_title("Anomalous sources across the stellar-mass–SFR plane")
-    ax.legend(fontsize=9, loc="upper left")
+    ax.legend(loc="upper left")
     fig.tight_layout()
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -29,6 +29,23 @@ from pipeline.quality import UMAPDBSCANChecker
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Dark, high-contrast plot style matching notebooks/04_interpretation.ipynb
+# (same crimson highlight colour), bumped to print-quality DPI.
+plt.style.use("dark_background")
+plt.rcParams.update({
+    "figure.dpi": 150,
+    "savefig.dpi": 150,
+    "axes.titlesize": 14,
+    "axes.labelsize": 12,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+    "lines.linewidth": 1.5,
+    "axes.grid": True,
+    "grid.alpha": 0.3,
+    "errorbar.capsize": 4,
+})
+
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_PATH = ROOT / "results" / "figures" / "umap_embedding.pdf"
 TOP_FRACTION = 0.02
@@ -82,13 +99,13 @@ def main() -> Path:
     cb = fig.colorbar(sca, ax=ax)
     cb.set_label(f"{ENSEMBLE_SCORE_VAR}")
     ax.scatter(
-        emb_x[is_anomaly], emb_y[is_anomaly], s=22, facecolors="none", edgecolors="crimson",
+        emb_x[is_anomaly], emb_y[is_anomaly], s=22, facecolors="none", edgecolors="#DC143C",
         linewidths=0.8, label=f"Top {TOP_FRACTION:.0%} anomalous ($N={n_anomaly}$)", zorder=2,
     )
     ax.set_xlabel("UMAP dimension 1")
     ax.set_ylabel("UMAP dimension 2")
     ax.set_title("UMAP embedding of SED residuals")
-    ax.legend(fontsize=9, loc="best")
+    ax.legend(loc="best")
     fig.tight_layout()
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
