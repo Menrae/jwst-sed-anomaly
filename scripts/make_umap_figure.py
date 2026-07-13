@@ -9,7 +9,7 @@ by `pipeline.quality.apply_quality_pipeline` (config/pipeline_config.yaml's
 coordinates it stashes on `ds.attrs`. Points are colored by `qc_anomaly_score`
 (already present on the b1 dataset) with the top-2% ensemble-score anomalies
 overplotted, using the same quantile convention as
-`DiagnosticPlotter.redshift_anomaly_rate` and `scripts/make_mass_sfr_figure.py`.
+`DiagnosticPlotter.redshift_anomaly_rate`.
 
 Run: python -m scripts.make_umap_figure
 """
