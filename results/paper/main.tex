@@ -38,7 +38,7 @@ galaxies in the CEERS Data Release 1.0 JWST/NIRCam photometric catalog
 derived with a real EAZY fit; per-band residuals between observed and
 best-fit photometry are then scored for anomalies using an ensemble of
 Isolation Forest and UMAP+DBSCAN, and cross-matched against the Milliquas
-v8 active galactic nucleus (AGN) catalog to separate genuine outliers from
+v8 active galactic nucleus (AGN) catalog to separate outliers from
 well-understood astrophysical contaminants. Of 87,345 CEERS sources
 ingested, 68,839 pass redshift and photometric-coverage cuts; EAZY's own
 fit-failure sentinel further excludes 2,900 (4.2\%) from anomaly scoring,
@@ -167,7 +167,7 @@ the best-fit-redshift search does not converge on a valid template
 solution; a degenerate, non-converged fit of this kind forces spuriously
 large per-band residuals (Section~\ref{sec:residual-extraction}) that would
 otherwise dominate the anomaly ranking with fit-failure artifacts rather
-than genuine SED outliers. We therefore exclude these sources from anomaly
+than SED outliers. We therefore exclude these sources from anomaly
 scoring entirely, retaining them in the output catalog with a
 \texttt{qc\_eazy\_fit\_failure} flag rather than silently dropping them.
 Of the 68,839 sources entering the fit, 2,900 (4.2\%) are flagged this way,
@@ -181,7 +181,7 @@ For each source with a converged EAZY fit, per-band photometric residuals
 are computed as $(f_{\rm obs} - f_{\rm model}) / \sigma_{\rm obs}$, where
 $f_{\rm model}$ is EAZY's own best-fit template photometry
 (\texttt{PhotoZ.fmodel}) at that source's best-fit redshift --- not an
-independent continuum model, so a residual reflects a genuine deviation
+independent continuum model, so a residual reflects a deviation
 from the best-fit template rather than a mismatch against a generic
 smooth-SED stand-in (cf.\ the general SED-fitting residual framework
 reviewed by \citealt{Conroy2013}). These residual vectors form the feature
@@ -270,7 +270,7 @@ sources exist for this sample, we cannot estimate this pipeline's formal
 completeness (the fraction of true anomalies recovered) or purity (the
 fraction of flagged sources that are true anomalies) in the standard
 classifier-evaluation sense. We therefore explicitly do not claim that 2\%
-of CEERS galaxies are genuinely anomalous; the 2\% figure describes only
+of CEERS galaxies are anomalous; the 2\% figure describes only
 how aggressively the ensemble score is thresholded, and every other number
 in this paper (the AGN/emission-line contaminant fractions, the
 unexplained fraction, the redshift-trend $p$-value) should be read as
@@ -292,7 +292,7 @@ full clean sample, only 156 of 65,939 sources (0.24\%) match Milliquas at
 all. This is a low match rate in absolute terms, but Milliquas is an
 optically/radio-selected catalog assembled from shallower, wider surveys
 than CEERS, so incompleteness at CEERS's much fainter JWST magnitude limits
-is expected rather than evidence that AGN activity is genuinely rare among
+is expected rather than evidence that AGN activity is rare among
 the flagged population; we return to this caveat in
 Section~\ref{sec:discussion}.
 
@@ -343,7 +343,7 @@ ensemble score for sources $>0.3$~dex above versus at/below the running
 median finds $p < 10^{-300}$, i.e., indistinguishable from zero at double
 floating-point precision. This is a far stronger association than the
 absence of any redshift trend in Section~\ref{sec:results-redshift}, and is
-consistent with elevated specific star-formation rate driving genuinely
+consistent with elevated specific star-formation rate driving
 larger photometric residuals against EAZY's best-fit template (rather than
 signaling a population of exotic outliers); we return to this reading in
 Section~\ref{sec:discussion}.
@@ -409,8 +409,8 @@ P(D\mid H_0)\,P(H_0)},
 where $D$ is the observation that a source is flagged and unexplained. We
 adopt a prior $P(H_1) = 10^{-8}$ per source, so $P(H_0) = 1-P(H_1)
 \approx 1$, and the maximally generous likelihood $P(D\mid H_1) = 1.0$
-(i.e., we assume any source whose SED genuinely reflected non-standard
-physics would certainly present as flagged and unexplained). For
+(i.e., we assume any source whose SED reflected non-standard
+physics would present as flagged and unexplained). For
 $P(D\mid H_0)$ we use the empirical rate of "unexplained" outcomes among
 already-\emph{flagged} sources under standard astrophysics alone: of the
 1,319 flagged sources, 1,174 match neither the AGN nor emission-line
@@ -461,7 +461,7 @@ excluding the 2,900 sources with EAZY's explicit fit-failure sentinel
 \emph{catastrophic} photo-$z$ failures among the sources EAZY reports as
 formally converged --- a source can return a plausible-looking
 $\chi^2_{\rm EAZY} \ge 0$ at the wrong redshift, which would masquerade as
-a genuine SED anomaly rather than a fit-failure artifact, and this pipeline
+a SED anomaly rather than a fit-failure artifact, and this pipeline
 has no spectroscopic-redshift comparison sample with which to measure that
 rate directly. Second, Milliquas v8's 0.24\% match rate against the full
 clean sample (Section~\ref{sec:results-rate}) reflects that catalog's
@@ -471,7 +471,7 @@ sources; a more complete X-ray- or mid-infrared-selected AGN reference
 catalog would likely reclassify some fraction of the "unexplained"
 population as AGN-contaminated. Third, every residual in this analysis is
 measured against one finite EAZY template set
-(\texttt{tweak\_fsps\_QSF\_12\_v3}); a source with a genuinely unusual but
+(\texttt{tweak\_fsps\_QSF\_12\_v3}); a source with an unusual but
 astrophysically ordinary SED shape (e.g., an extreme starburst, evolved
 population blend, or dusty system) outside that template library's span
 would also register as an anomaly, indistinguishable in this analysis from
@@ -538,7 +538,7 @@ genuine SED anomaly, a catastrophic photo-$z$ failure, and an unmodeled
 emission-line or AGN contaminant. Third, replacing the single
 \texttt{tweak\_fsps\_QSF\_12\_v3} EAZY template set with a broader
 fitting library (e.g., Prospector or CIGALE) would test whether template
-mismatch, rather than genuine anomalies, drives a meaningful share of the
+mismatch, rather than anomalies, drives a meaningful share of the
 flagged population. Fourth, a spectroscopic comparison sample would let us
 directly characterize the catastrophic photo-$z$ failure rate this
 pipeline currently cannot measure (Section~\ref{sec:discussion}).
